@@ -93,6 +93,22 @@ public class PrestamoController {
                 linkTo(methodOn(PrestamoController.class).findAll()).withSelfRel()));
     }
 
+    @Operation(summary = "Listar prestamos atrasados",
+               description = "Retorna los prestamos VIGENTE cuya fecha de vencimiento ya paso, del mas atrasado al mas reciente")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Listado obtenido correctamente (vacio si no hay atrasos)",
+            content = @Content(array = @ArraySchema(schema = @Schema(implementation = PrestamoResponse.class))))
+    })
+    @GetMapping("/atrasados")
+    public ResponseEntity<CollectionModel<PrestamoResponse>> findAtrasados() {
+        List<PrestamoResponse> atrasados = prestamoService.findAtrasados();
+        atrasados.forEach(this::addLinks);
+
+        return ResponseEntity.ok(CollectionModel.of(
+                atrasados,
+                linkTo(methodOn(PrestamoController.class).findAtrasados()).withSelfRel()));
+    }
+
     @Operation(summary = "Obtener prestamo por ID",
                description = "Retorna un prestamo segun su identificador unico")
     @ApiResponses({

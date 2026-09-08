@@ -1,5 +1,6 @@
 package cl.jctapia.prestamos.service;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -53,6 +54,23 @@ public class PrestamoService {
         // Un historial vacio no es un error: el socio simplemente nunca ha
         // pedido un libro. Se devuelve la lista vacia y no un 404.
         return prestamoMapper.toResponseList(historial);
+    }
+
+    /**
+     * Prestamos VIGENTE cuya fecha de vencimiento ya paso.
+     *
+     * Un prestamo que vence hoy todavia no esta atrasado: el socio tiene el
+     * dia completo para devolverlo, por eso se compara con "antes de hoy".
+     * Los DEVUELTO y CANCELADO no cuentan aunque hayan vencido: ya no hay
+     * ejemplar que reclamar.
+     */
+    @Transactional(readOnly = true)
+    public List<PrestamoResponse> findAtrasados() {
+        List<Prestamo> atrasados = prestamoRepository
+                .findByEstadoAndFechaVencimientoBeforeOrderByFechaVencimientoAsc(
+                        EstadoPrestamo.VIGENTE, LocalDate.now());
+
+        return prestamoMapper.toResponseList(atrasados);
     }
 
     // ─── Comandos ─────────────────────────────────────────────────────────────

@@ -113,6 +113,7 @@ Base: `http://localhost:9005/api/v1/prestamos`
 | `GET` | `/` | Lista todos los préstamos | 200 |
 | `GET` | `/{id}` | Obtiene un préstamo por ID | 200, 404 |
 | `GET` | `/usuario/{rut}` | Historial de un socio, del más reciente al más antiguo | 200 |
+| `GET` | `/atrasados` | Préstamos `VIGENTE` con fecha de vencimiento anterior a hoy, del más atrasado al más reciente | 200 |
 | `POST` | `/` | Registra un préstamo en estado `VIGENTE` | 201, 400, 409 |
 | `PUT` | `/{id}` | Actualiza los datos de un préstamo | 200, 400, 404, 409 |
 | `DELETE` | `/{id}` | Elimina un préstamo | 204, 404 |
