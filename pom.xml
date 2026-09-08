@@ -22,7 +22,7 @@
     <!-- Coordenadas GAV del microservicio -->
     <groupId>cl.jctapia</groupId>
     <artifactId>ms-prestamos</artifactId>
-    <version>1.0.2</version>
+    <version>1.0.3</version>
     <packaging>jar</packaging>
 
     <name>ms-prestamos</name>

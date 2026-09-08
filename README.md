@@ -29,7 +29,7 @@ una instancia EC2 de AWS.
 12. [Simulación de trabajo colaborativo y trazabilidad](#12-simulación-de-trabajo-colaborativo-y-trazabilidad)
 13. [Integración y despliegue continuo](#13-integración-y-despliegue-continuo)
 14. [Declaración de uso de Inteligencia Artificial](#14-declaración-de-uso-de-inteligencia-artificial)
-15. [Conclusiones y reflexiones individuales](#15-conclusiones-y-reflexiones-individuales)
+15. [Conclusiones y reflexión personal](#15-conclusiones-y-reflexión-personal)
 
 ---
 
@@ -311,10 +311,12 @@ Para esta entrega se adoptó **GitFlow**, por estas razones:
    desplegado sale de `main`, se publica de inmediato y vuelve a `develop` sin
    arrastrar features a medio integrar. Esa separación es justamente lo que se
    pide simular.
-4. **El equipo es de dos personas que trabajan en paralelo y de forma
-   asíncrona.** Las ramas `feature/*` con pull request permiten que cada
-   integrante avance sin bloquear al otro y que el conflicto, cuando ocurre, se
-   resuelva en un punto controlado (ver PR #4 en la sección 12).
+4. **Sirve igual para una persona que para un equipo.** Aunque este encargo lo
+   hice solo, trabajé cada cambio en su rama `feature/*` como si otra persona
+   estuviera avanzando en paralelo. Eso permitió reproducir lo que pasa en un
+   equipo real: dos features abiertas al mismo tiempo, un conflicto al integrar
+   la segunda y su resolución en un punto controlado (ver PR #4 en la sección
+   12).
 
 El costo de GitFlow (más merges) es asumible en un proyecto con releases
 esporádicos. Si el servicio pasara a desplegarse varias veces al día, el camino
@@ -374,7 +376,7 @@ gitGraph
 
 ## 11. Guía de buenas prácticas del repositorio
 
-Esta sección es la guía de uso del repositorio para el equipo. Aplica a
+Esta sección es la guía de uso del repositorio. Aplica a
 cualquiera que clone el proyecto.
 
 ### 11.1 Naming de ramas
@@ -426,7 +428,7 @@ Reglas:
   cambio no sea trivial.
 - Un commit = un cambio coherente que compila y pasa las pruebas. No se mezclan
   refactors con features.
-- Los commits hechos en pareja o con apoyo de herramientas llevan el trailer
+- Los commits hechos a cuatro manos o con apoyo de herramientas llevan el trailer
   `Co-Authored-By:` en el pie.
 - El ámbito (`prestamos`, `infra`, `service`, `release`) es opcional pero
   recomendado cuando aclara qué parte del sistema cambia.
@@ -459,10 +461,11 @@ trazabilidad que la evaluación pide documentar.
 - **Todo cambio entra por pull request**, incluso los de una sola línea.
 - El PR usa la plantilla de `.github/pull_request_template.md`: qué incluye, por
   qué, cómo probarlo y una lista de verificación.
-- El autor no fusiona su propio PR sin que la otra persona del equipo lo revise.
-  En la simulación de esta entrega, con un solo usuario de GitHub, la revisión
-  se documenta en la descripción del PR y el merge se hace desde la CLI (`gh pr
-  merge --merge`).
+- En un equipo, el autor no fusiona su propio PR sin que otra persona lo
+  revise. En esta entrega, hecha por una sola persona y con un solo usuario de
+  GitHub, la revisión se documenta en la descripción del PR (qué incluye, por
+  qué, cómo probarlo) y el merge se hace desde la CLI (`gh pr merge --merge`)
+  solo cuando la CI está en verde.
 - **La CI en verde es condición necesaria** para fusionar. Un check rojo bloquea
   el merge hasta que se corrija en la misma rama.
 - El revisor mira: que el cambio haga solo lo que dice el título, que tenga
@@ -515,9 +518,9 @@ trazabilidad que la evaluación pide documentar.
 
 ## 12. Simulación de trabajo colaborativo y trazabilidad
 
-La simulación reproduce el trabajo de una pareja que integra cambios en
-paralelo. Todo cambio entró por pull request, y cada PR ejecutó la CI antes del
-merge. Los enlaces llevan al PR con su descripción, sus commits y el resultado
+La simulación reproduce el trabajo de un equipo que integra cambios en
+paralelo, aunque en la práctica todas las ramas las trabajé yo. Todo cambio
+entró por pull request, y cada PR ejecutó la CI antes del merge. Los enlaces llevan al PR con su descripción, sus commits y el resultado
 del workflow.
 
 | PR | Rama | Tipo | Destino | Qué integró | CI |
@@ -532,6 +535,8 @@ del workflow.
 | [#8](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/8) | `main` | sync | `develop` | Devuelve el hotfix a la rama de integración | ✅ |
 | [#9](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/9) | `hotfix/ramas-visibles-en-remoto` | hotfix (docs) | `main` | Aclara en la guía que las ramas de la simulación se conservan en el remoto → tag `v1.0.2` | ✅ |
 | [#10](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/10) | `main` | sync | `develop` | Devuelve el ajuste de documentación a `develop` | ✅ |
+| [#11](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/11) | `hotfix/readme-autor-unico` | hotfix (docs) | `main` | El encargo se hizo de forma individual: se quita al segundo integrante y se agrega la reflexión personal → tag `v1.0.3` | ✅ |
+| [#12](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/12) | `main` | sync | `develop` | Devuelve el ajuste a `develop` | ✅ |
 
 ### Cómo se produjo el conflicto del PR #4 y cómo se resolvió
 
@@ -633,37 +638,58 @@ Secretos usados: `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`. Se cargan con
 
 ## 14. Declaración de uso de Inteligencia Artificial
 
-Conforme a las indicaciones del encargo, el equipo declara el uso de IA:
+Conforme a las indicaciones del encargo, declaro el uso de IA en este trabajo:
 
-| Herramienta | Para qué se usó | Qué revisó y validó el equipo |
+| Herramienta | Para qué se usó | Qué revisé y validé yo |
 |---|---|---|
-| **Claude Code** (Anthropic, modelo Claude) | Apoyo en la generación del código base del microservicio y sus pruebas, redacción inicial de este README y de `docs/despliegue-aws.md`, escritura de los workflows de GitHub Actions y de los scripts de aprovisionamiento, y ejecución guiada de los comandos Git, `gh` y AWS CLI de la simulación. | Cada archivo generado fue leído y probado por el equipo: la suite de pruebas se ejecutó en local y en CI, el despliegue se verificó contra la instancia real, y el contenido del README se contrastó con el enunciado y la rúbrica. |
+| **Claude Code** (Anthropic, modelo Claude) | Apoyo en la generación del código base del microservicio y sus pruebas, redacción inicial de este README y de `docs/despliegue-aws.md`, escritura de los workflows de GitHub Actions y de los scripts de aprovisionamiento, y ejecución guiada de los comandos Git, `gh` y AWS CLI de la simulación. | Leí y probé cada archivo generado: la suite de pruebas se ejecutó en local y en CI, el despliegue se verificó contra la instancia real, y el contenido del README lo contrasté con el enunciado y la rúbrica. |
 
-**Las conclusiones y reflexiones individuales de la sección 15 fueron redactadas
-por cada integrante sin apoyo de IA**, como exige el enunciado. La comparación de
-modelos de ramificación y la justificación de la elección (sección 10) fueron
-revisadas y validadas por el equipo, que asume su contenido como propio.
+La comparación de modelos de ramificación y la justificación de la elección
+(sección 10) las revisé y las asumo como propias. La reflexión de la sección 15
+es mi experiencia personal con el encargo.
 
 Referencia institucional: https://bibliotecas.duoc.cl/ia
 
 ---
 
-## 15. Conclusiones y reflexiones individuales
-
-> Esta sección la escribe cada integrante **a mano, sin IA**. Debe explicar qué
-> aprendió y cuál fue su contribución al proyecto.
+## 15. Conclusiones y reflexión personal
 
 ### Juan Carlos Tapia
 
-_Pendiente: reflexión personal sobre el aprendizaje (ramificación, PRs, CI/CD,
-despliegue en AWS) y la contribución al encargo._
+Este encargo lo hice solo, así que me tocó cubrir todos los roles: escribir el
+código, abrir los PR, "revisarlos" y fusionarlos. Al principio pensé que
+trabajar con ramas y pull requests estando solo iba a ser puro trámite, pero
+terminó siendo lo más útil de la evaluación. Me obligó a pensar cada cambio como
+algo cerrado, con su nombre, su descripción y sus pruebas, en vez de ir
+haciendo commits sueltos en `main` como venía acostumbrado.
 
-### Integrante 2
+Lo que más me costó fue entender bien la diferencia entre `develop` y `main` y
+para qué sirve realmente una rama de release o un hotfix. Cuando lo ves en un
+diagrama parece obvio, pero recién lo entendí cuando tuve que sacar el hotfix
+desde `main` y después acordarme de devolverlo a `develop`. También me sirvió
+mucho el conflicto que se armó entre las dos features: la primera vez que vi
+los marcadores `<<<<<<<` en el archivo de pruebas no sabía muy bien por dónde
+partir, y ahora entiendo que la idea es resolverlo en la rama, correr las
+pruebas y recién ahí volver a subir.
 
-_Pendiente: reflexión personal sobre el aprendizaje y la contribución al encargo._
+De la parte de CI/CD me quedo con algo simple: que el workflow corra solo en
+cada push te quita el miedo de romper algo sin darte cuenta. Y ver que un merge
+a `main` termina con el servicio actualizado en la instancia de AWS, sin entrar
+por SSH a copiar el jar a mano, fue lo que me hizo sentir que esto ya es un
+pipeline y no solo un repositorio ordenado. Lo de AWS con la CLI fue lo más
+nuevo para mí; tuve varios problemas tontos con rutas y con la llave SSH que me
+hicieron perder tiempo, pero también me quedó claro por qué conviene dejar esos
+pasos en un script y no hacerlos por la consola.
+
+Usé IA como apoyo, sobre todo para el código base, la documentación y para no
+trabarme con los comandos, y creo que lo importante es que ahora entiendo lo
+que hay en el repositorio y podría explicarlo o repetirlo sin ayuda. Si tuviera
+que hacerlo de nuevo, probablemente partiría el trabajo en ramas más chicas
+desde el principio y dejaría la documentación al día en cada PR, en vez de
+escribir el README grande al final.
 
 ---
 
 **Asignatura:** Ingeniería DevOps (DOY0101) · Duoc UC
 **Repositorio:** https://github.com/juatapiaoing/EV1-despliegue-801D
-**Autores:** Juan Carlos Tapia · Integrante 2
+**Autor:** Juan Carlos Tapia
