@@ -142,6 +142,9 @@ proceso que recorriera la tabla todos los días para mantenerla al corriente.
    préstamos `VIGENTE`; fija la fecha de devolución en el día actual.
 5. Un préstamo está **atrasado** si sigue `VIGENTE` y su vencimiento es anterior a
    hoy. El que vence hoy todavía no lo está.
+6. Un préstamo `VIGENTE` **no se puede eliminar**: el ejemplar sigue fuera de la
+   biblioteca y borrar el registro haría perder su rastro. Primero se devuelve o
+   se cancela (corregido en el hotfix `v1.0.1`).
 
 ## 5. API REST
 
@@ -156,7 +159,7 @@ Base: `http://localhost:9005/api/v1/prestamos`
 | `POST` | `/` | Registra un préstamo en estado `VIGENTE` | 201, 400, 409 |
 | `PUT` | `/{id}` | Actualiza los datos de un préstamo | 200, 400, 404, 409 |
 | `PATCH` | `/{id}/devolucion` | Registra la devolución: estado `DEVUELTO` y fecha de hoy. Solo para préstamos `VIGENTE` | 200, 404, 409 |
-| `DELETE` | `/{id}` | Elimina un préstamo | 204, 404 |
+| `DELETE` | `/{id}` | Elimina un préstamo. Un préstamo `VIGENTE` no se puede eliminar: primero debe devolverse o cancelarse | 204, 404, 409 |
 
 Todas las respuestas de error comparten el mismo envelope `ApiError`
 (`timestamp`, `status`, `error`, `message`, `errors`, `path`), de modo que el
@@ -246,7 +249,7 @@ nunca queden versionadas en el repositorio:
 ./mvnw test
 ```
 
-- `PrestamoServiceTest` — 13 pruebas unitarias con Mockito sobre las reglas de
+- `PrestamoServiceTest` — 14 pruebas unitarias con Mockito sobre las reglas de
   negocio (creación, actualización, devolución, atrasados, consultas y borrado).
   El repositorio y el mapper se sustituyen por mocks: lo que se verifica es la
   decisión del servicio, no que Hibernate sepa escribir en una tabla.

@@ -208,10 +208,11 @@ public class PrestamoController {
     }
 
     @Operation(summary = "Eliminar un prestamo",
-               description = "Elimina definitivamente un prestamo del sistema")
+               description = "Elimina definitivamente un prestamo que ya no esta VIGENTE. Un prestamo vigente debe devolverse o cancelarse antes")
     @ApiResponses({
         @ApiResponse(responseCode = "204", description = "Prestamo eliminado correctamente", content = @Content),
-        @ApiResponse(responseCode = "404", description = "El prestamo no existe", content = @Content)
+        @ApiResponse(responseCode = "404", description = "El prestamo no existe", content = @Content),
+        @ApiResponse(responseCode = "409", description = "El prestamo esta VIGENTE y no puede eliminarse", content = @Content)
     })
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteById(
