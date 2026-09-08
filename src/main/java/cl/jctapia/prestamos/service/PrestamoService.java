@@ -56,6 +56,23 @@ public class PrestamoService {
         return prestamoMapper.toResponseList(historial);
     }
 
+    /**
+     * Prestamos VIGENTE cuya fecha de vencimiento ya paso.
+     *
+     * Un prestamo que vence hoy todavia no esta atrasado: el socio tiene el
+     * dia completo para devolverlo, por eso se compara con "antes de hoy".
+     * Los DEVUELTO y CANCELADO no cuentan aunque hayan vencido: ya no hay
+     * ejemplar que reclamar.
+     */
+    @Transactional(readOnly = true)
+    public List<PrestamoResponse> findAtrasados() {
+        List<Prestamo> atrasados = prestamoRepository
+                .findByEstadoAndFechaVencimientoBeforeOrderByFechaVencimientoAsc(
+                        EstadoPrestamo.VIGENTE, LocalDate.now());
+
+        return prestamoMapper.toResponseList(atrasados);
+    }
+
     // ─── Comandos ─────────────────────────────────────────────────────────────
 
     @Transactional

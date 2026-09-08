@@ -182,6 +182,45 @@ class PrestamoServiceTest {
         assertTrue(resultado.isEmpty());
     }
 
+    // ─── findAtrasados ────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("findAtrasados consulta solo los VIGENTE vencidos antes de hoy")
+    void findAtrasados_consultaVigentesVencidosAntesDeHoy() {
+        Prestamo atrasado = Prestamo.builder()
+                .id(7L)
+                .codigoLibro("BIB-2050")
+                .rutUsuario("20111222-3")
+                .fechaPrestamo(LocalDate.now().minusDays(30))
+                .fechaVencimiento(LocalDate.now().minusDays(16))
+                .estado(EstadoPrestamo.VIGENTE)
+                .build();
+
+        when(prestamoRepository.findByEstadoAndFechaVencimientoBeforeOrderByFechaVencimientoAsc(
+                EstadoPrestamo.VIGENTE, LocalDate.now()))
+                .thenReturn(List.of(atrasado));
+        when(prestamoMapper.toResponseList(List.of(atrasado))).thenReturn(List.of(new PrestamoResponse()));
+
+        List<PrestamoResponse> resultado = prestamoService.findAtrasados();
+
+        assertEquals(1, resultado.size());
+
+        // La regla "vigente y vencido antes de hoy" vive en el servicio: se
+        // verifica que llegue exactamente ese criterio al repositorio.
+        verify(prestamoRepository).findByEstadoAndFechaVencimientoBeforeOrderByFechaVencimientoAsc(
+                EstadoPrestamo.VIGENTE, LocalDate.now());
+    }
+
+    @Test
+    @DisplayName("findAtrasados devuelve lista vacia cuando nadie esta atrasado")
+    void findAtrasados_devuelveListaVacia_cuandoNoHayAtrasos() {
+        when(prestamoRepository.findByEstadoAndFechaVencimientoBeforeOrderByFechaVencimientoAsc(
+                any(), any())).thenReturn(List.of());
+        when(prestamoMapper.toResponseList(List.of())).thenReturn(List.of());
+
+        assertTrue(prestamoService.findAtrasados().isEmpty());
+    }
+
     // ─── registrarDevolucion ──────────────────────────────────────────────────
 
     @Test
