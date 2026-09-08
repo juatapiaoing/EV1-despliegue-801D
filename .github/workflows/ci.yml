@@ -1,0 +1,57 @@
+# ============================================================
+# CI - Integracion continua de ms-prestamos
+# ============================================================
+# Se ejecuta en:
+#   - cada push a develop        -> valida la rama de integracion
+#   - cada pull request a main    -> bloquea releases/hotfixes rotos
+#   - cada pull request a develop -> valida las features antes del merge
+#
+# Un solo job: compilar, correr las pruebas y empaquetar el .jar.
+# Las pruebas usan H2 en memoria (perfil dev), por lo que el runner
+# no necesita base de datos ni ningun servicio externo.
+# ============================================================
+name: CI - Build y pruebas
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Compilar y probar (Java 21)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Obtener el codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Dar permiso de ejecucion al Maven Wrapper
+        run: chmod +x mvnw
+
+      - name: Compilar, probar y empaquetar
+        run: ./mvnw -B clean verify
+
+      - name: Publicar reportes de pruebas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reportes-surefire
+          path: target/surefire-reports/
+          retention-days: 7
+
+      - name: Publicar artefacto .jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: ms-prestamos-jar
+          path: target/ms-prestamos-*.jar
+          retention-days: 7
