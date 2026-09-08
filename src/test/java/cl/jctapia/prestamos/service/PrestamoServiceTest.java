@@ -182,6 +182,83 @@ class PrestamoServiceTest {
         assertTrue(resultado.isEmpty());
     }
 
+    // ─── findAtrasados ────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("findAtrasados consulta solo los VIGENTE vencidos antes de hoy")
+    void findAtrasados_consultaVigentesVencidosAntesDeHoy() {
+        Prestamo atrasado = Prestamo.builder()
+                .id(7L)
+                .codigoLibro("BIB-2050")
+                .rutUsuario("20111222-3")
+                .fechaPrestamo(LocalDate.now().minusDays(30))
+                .fechaVencimiento(LocalDate.now().minusDays(16))
+                .estado(EstadoPrestamo.VIGENTE)
+                .build();
+
+        when(prestamoRepository.findByEstadoAndFechaVencimientoBeforeOrderByFechaVencimientoAsc(
+                EstadoPrestamo.VIGENTE, LocalDate.now()))
+                .thenReturn(List.of(atrasado));
+        when(prestamoMapper.toResponseList(List.of(atrasado))).thenReturn(List.of(new PrestamoResponse()));
+
+        List<PrestamoResponse> resultado = prestamoService.findAtrasados();
+
+        assertEquals(1, resultado.size());
+
+        // La regla "vigente y vencido antes de hoy" vive en el servicio: se
+        // verifica que llegue exactamente ese criterio al repositorio.
+        verify(prestamoRepository).findByEstadoAndFechaVencimientoBeforeOrderByFechaVencimientoAsc(
+                EstadoPrestamo.VIGENTE, LocalDate.now());
+    }
+
+    @Test
+    @DisplayName("findAtrasados devuelve lista vacia cuando nadie esta atrasado")
+    void findAtrasados_devuelveListaVacia_cuandoNoHayAtrasos() {
+        when(prestamoRepository.findByEstadoAndFechaVencimientoBeforeOrderByFechaVencimientoAsc(
+                any(), any())).thenReturn(List.of());
+        when(prestamoMapper.toResponseList(List.of())).thenReturn(List.of());
+
+        assertTrue(prestamoService.findAtrasados().isEmpty());
+    }
+
+    // ─── registrarDevolucion ──────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("registrarDevolucion cierra un prestamo VIGENTE con la fecha de hoy")
+    void registrarDevolucion_marcaDevueltoYFechaActual_cuandoElPrestamoEstaVigente() {
+        when(prestamoRepository.findById(1L)).thenReturn(Optional.of(prestamo));
+        when(prestamoRepository.save(prestamo)).thenReturn(prestamo);
+        when(prestamoMapper.toResponse(prestamo)).thenReturn(new PrestamoResponse());
+
+        prestamoService.registrarDevolucion(1L);
+
+        ArgumentCaptor<Prestamo> capturado = ArgumentCaptor.forClass(Prestamo.class);
+        verify(prestamoRepository).save(capturado.capture());
+        assertEquals(EstadoPrestamo.DEVUELTO, capturado.getValue().getEstado());
+        assertEquals(LocalDate.now(), capturado.getValue().getFechaDevolucion());
+    }
+
+    @Test
+    @DisplayName("registrarDevolucion rechaza un prestamo que ya fue devuelto")
+    void registrarDevolucion_lanzaBusinessRuleException_cuandoElPrestamoNoEstaVigente() {
+        prestamo.setEstado(EstadoPrestamo.DEVUELTO);
+        when(prestamoRepository.findById(1L)).thenReturn(Optional.of(prestamo));
+
+        BusinessRuleException ex = assertThrows(BusinessRuleException.class,
+                () -> prestamoService.registrarDevolucion(1L));
+
+        assertTrue(ex.getMessage().contains("DEVUELTO"));
+        verify(prestamoRepository, never()).save(any(Prestamo.class));
+    }
+
+    @Test
+    @DisplayName("registrarDevolucion lanza 404 cuando el prestamo no existe")
+    void registrarDevolucion_lanzaEntityNotFoundException_cuandoElPrestamoNoExiste() {
+        when(prestamoRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(EntityNotFoundException.class, () -> prestamoService.registrarDevolucion(99L));
+    }
+
     // ─── delete ───────────────────────────────────────────────────────────────
 
     @Test

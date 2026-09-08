@@ -1,5 +1,6 @@
 package cl.jctapia.prestamos.repository;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -21,6 +22,14 @@ public interface PrestamoRepository extends JpaRepository<Prestamo, Long> {
 
     /** Historial de un socio, del prestamo mas reciente al mas antiguo. */
     List<Prestamo> findByRutUsuarioOrderByFechaPrestamoDesc(String rutUsuario);
+
+    /**
+     * Prestamos en un estado dado cuya fecha de vencimiento ya paso, del mas
+     * atrasado al mas reciente. El atraso no se persiste: se calcula aqui
+     * comparando contra la fecha que entrega el servicio.
+     */
+    List<Prestamo> findByEstadoAndFechaVencimientoBeforeOrderByFechaVencimientoAsc(
+            EstadoPrestamo estado, LocalDate fecha);
 
     /** Indica si el ejemplar ya esta comprometido en un prestamo con ese estado. */
     boolean existsByCodigoLibroAndEstado(String codigoLibro, EstadoPrestamo estado);

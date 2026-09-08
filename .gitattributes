@@ -1,0 +1,13 @@
+# Normalizar finales de linea: el repositorio guarda siempre LF.
+# Evita que un checkout en Windows convierta a CRLF los scripts que
+# despues se ejecutan en Linux (mvnw, user-data.sh, deploy por SSH).
+* text=auto eol=lf
+
+# Scripts de Windows si necesitan CRLF
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binarios
+*.jar binary
+*.pdf binary
+*.png binary
