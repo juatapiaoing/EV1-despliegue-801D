@@ -127,9 +127,25 @@ public class PrestamoService {
         return prestamoMapper.toResponse(prestamoRepository.save(prestamo));
     }
 
+    /**
+     * Elimina un prestamo que ya termino su ciclo.
+     *
+     * Un prestamo VIGENTE no se borra: el ejemplar sigue fuera de la biblioteca
+     * y eliminar el registro haria perder su rastro (y liberaria el ejemplar
+     * para un nuevo prestamo sin que nadie lo haya devuelto). Primero hay que
+     * registrar la devolucion o cancelarlo.
+     */
     @Transactional
     public void deleteById(Long id) {
-        prestamoRepository.delete(obtenerPrestamo(id));
+        Prestamo prestamo = obtenerPrestamo(id);
+
+        if (prestamo.getEstado() == EstadoPrestamo.VIGENTE) {
+            throw new BusinessRuleException(String.format(
+                    "El prestamo %d esta VIGENTE y no puede eliminarse: registre la devolucion o cancelelo primero",
+                    id));
+        }
+
+        prestamoRepository.delete(prestamo);
     }
 
     // ─── Apoyo interno ────────────────────────────────────────────────────────

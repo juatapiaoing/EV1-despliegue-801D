@@ -262,12 +262,27 @@ class PrestamoServiceTest {
     // ─── delete ───────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("deleteById elimina el prestamo solicitado cuando existe")
-    void deleteById_eliminaElPrestamo_cuandoExiste() {
+    @DisplayName("deleteById elimina un prestamo que ya no esta vigente")
+    void deleteById_eliminaElPrestamo_cuandoYaNoEstaVigente() {
+        prestamo.setEstado(EstadoPrestamo.DEVUELTO);
         when(prestamoRepository.findById(1L)).thenReturn(Optional.of(prestamo));
 
         prestamoService.deleteById(1L);
 
         verify(prestamoRepository, times(1)).delete(prestamo);
+    }
+
+    @Test
+    @DisplayName("deleteById rechaza eliminar un prestamo VIGENTE")
+    void deleteById_lanzaBusinessRuleException_cuandoElPrestamoEstaVigente() {
+        when(prestamoRepository.findById(1L)).thenReturn(Optional.of(prestamo));
+
+        BusinessRuleException ex = assertThrows(BusinessRuleException.class,
+                () -> prestamoService.deleteById(1L));
+
+        assertTrue(ex.getMessage().contains("VIGENTE"));
+
+        // El registro debe seguir intacto: el ejemplar aun no ha vuelto.
+        verify(prestamoRepository, never()).delete(any(Prestamo.class));
     }
 }
