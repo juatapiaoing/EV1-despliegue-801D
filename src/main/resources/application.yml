@@ -55,4 +55,4 @@ info:
   app:
     nombre: ms-prestamos
     descripcion: Microservicio de gestion de prestamos de biblioteca
-    version: 1.0.0
+    version: @project.version@
