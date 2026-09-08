@@ -1,0 +1,93 @@
+# ============================================================
+# CD - Despliegue continuo de ms-prestamos en AWS EC2
+# ============================================================
+# Se ejecuta en cada push a main (es decir, al cerrar un release o
+# un hotfix). Vuelve a compilar y probar el codigo, copia el .jar a la
+# instancia por SSH, reinicia el servicio systemd y comprueba el
+# healthcheck de Actuator desde fuera de la instancia.
+#
+# Secretos del repositorio que necesita (Settings > Secrets > Actions):
+#   EC2_HOST      IP publica o DNS de la instancia
+#   EC2_USER      usuario SSH (ubuntu)
+#   EC2_SSH_KEY   llave privada del par de llaves de la instancia
+#
+# La instancia se aprovisiona con infra/aws/provision-ec2.sh, que deja
+# instalado el JRE, MySQL y la unidad systemd (ver docs/despliegue-aws.md).
+# ============================================================
+name: CD - Despliegue en EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Nunca dos despliegues a la vez sobre la misma instancia.
+concurrency:
+  group: despliegue-ec2
+  cancel-in-progress: false
+
+env:
+  APP_DIR: /opt/ms-prestamos
+  APP_PORT: 9005
+
+jobs:
+  deploy:
+    name: Empaquetar y desplegar
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Obtener el codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Compilar, probar y empaquetar
+        run: |
+          chmod +x mvnw
+          ./mvnw -B clean package
+          cp target/ms-prestamos-*.jar ms-prestamos.jar
+          ls -lh ms-prestamos.jar
+
+      - name: Preparar acceso SSH a la instancia
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2.pem
+          chmod 600 ~/.ssh/ec2.pem
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Copiar el artefacto a la instancia
+        run: |
+          scp -i ~/.ssh/ec2.pem ms-prestamos.jar \
+              "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${APP_DIR}/ms-prestamos.jar.new"
+
+      - name: Activar la nueva version y reiniciar el servicio
+        run: |
+          ssh -i ~/.ssh/ec2.pem "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" bash -s <<'REMOTE'
+            set -e
+            cd /opt/ms-prestamos
+            # Reemplazo atomico: si algo falla a mitad, el jar anterior sigue intacto.
+            mv -f ms-prestamos.jar.new ms-prestamos.jar
+            sudo systemctl restart ms-prestamos.service
+            sleep 5
+            sudo systemctl is-active ms-prestamos.service
+          REMOTE
+
+      - name: Verificar healthcheck
+        run: |
+          for i in $(seq 1 24); do
+            if curl -fsS "http://${{ secrets.EC2_HOST }}:${APP_PORT}/actuator/health" | grep -q '"status":"UP"'; then
+              echo "Servicio UP en http://${{ secrets.EC2_HOST }}:${APP_PORT}"
+              exit 0
+            fi
+            echo "Esperando al servicio... ($i/24)"
+            sleep 5
+          done
+          echo "El servicio no respondio UP en 120 s"
+          ssh -i ~/.ssh/ec2.pem "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+              'sudo journalctl -u ms-prestamos.service -n 60 --no-pager'
+          exit 1

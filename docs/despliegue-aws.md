@@ -1,267 +1,165 @@
 # Guía de despliegue — ms-prestamos en AWS EC2
 
 **Proyecto:** `cl.jctapia:ms-prestamos`
-**Entorno de destino:** Amazon EC2 (Ubuntu 24.04 LTS)
+**Entorno de destino:** Amazon EC2 (Ubuntu 24.04 LTS, `t3.micro`)
 **Gestión del proceso:** `systemd`
+**Mecanismo de despliegue:** GitHub Actions → SSH → EC2 (continuo, en cada push a `main`)
 
 ---
 
 ## 1. Objetivo
 
 Dejar el microservicio de préstamos corriendo en una instancia EC2 como un
-servicio administrado por `systemd`, con arranque automático al encender la
-máquina, reinicio ante fallos y credenciales fuera del repositorio.
+servicio administrado por `systemd`, con arranque automático, reinicio ante
+fallos y credenciales fuera del repositorio, y que **cada versión que llega a
+`main` se publique sola** sin pasos manuales.
 
 El artefacto que se despliega es un único `.jar` autocontenido: `ms-prestamos`
 no depende de Eureka, de un API Gateway ni de ningún otro servicio, así que la
 instancia solo necesita un JRE y una base de datos MySQL.
 
-## 2. Requisitos previos
+## 2. Arquitectura del despliegue
 
-**En el equipo local**
+```
+ desarrollador            GitHub                          AWS (us-east-1)
+ ─────────────   ┌──────────────────────────┐   ┌──────────────────────────────┐
+ git push ─────► │ main                     │   │ EC2 t3.micro  Ubuntu 24.04   │
+ (release /      │   └─► CD - Despliegue    │   │  ┌────────────────────────┐  │
+  hotfix)        │        en EC2            │   │  │ systemd: ms-prestamos  │  │
+                 │        1. mvnw package   │   │  │  java -jar             │  │
+                 │        2. scp .jar ──────┼───┼─►│  /opt/ms-prestamos/    │  │
+                 │        3. ssh restart ───┼───┼─►│  ms-prestamos.jar      │  │
+                 │        4. curl /health ◄─┼───┼──│  :9005                 │  │
+                 └──────────────────────────┘   │  └───────────┬────────────┘  │
+                                                │              │ localhost:3306 │
+                                                │  ┌───────────▼────────────┐  │
+                                                │  │ MySQL 8  (prestamos)   │  │
+                                                │  └────────────────────────┘  │
+                                                └──────────────────────────────┘
+```
 
-- JDK 21
-- Este repositorio clonado (incluye el Maven Wrapper, no hace falta instalar Maven)
-- Un cliente SSH/SFTP: OpenSSH, MobaXterm o PuTTY + WinSCP
+| Pieza | Archivo | Rol |
+|---|---|---|
+| Aprovisionamiento | [`infra/aws/provision-ec2.sh`](../infra/aws/provision-ec2.sh) | Crea par de llaves, security group e instancia con la AWS CLI |
+| Configuración inicial | [`infra/aws/user-data.sh`](../infra/aws/user-data.sh) | cloud-init: instala JRE 21 y MySQL, crea la BD, el `.env` y la unidad `systemd` |
+| Despliegue continuo | [`.github/workflows/cd-deploy.yml`](../.github/workflows/cd-deploy.yml) | Compila, copia el `.jar` por SSH, reinicia el servicio y verifica el healthcheck |
+| Esquema manual | [`db/init-prestamos.sql`](../db/init-prestamos.sql) | Equivalente a lo que hace `user-data.sh` en la BD, para instalaciones a mano |
+
+## 3. Requisitos previos
+
+**En el equipo que aprovisiona**
+
+- AWS CLI v1 o v2 con credenciales activas (`aws sts get-caller-identity` debe responder)
+- Bash (Git Bash sirve en Windows)
+- GitHub CLI (`gh`) autenticado en el repositorio, para cargar los secretos
 
 **En AWS**
 
-- Una instancia EC2 con AMI Ubuntu 24.04 LTS (`t3.micro` es suficiente)
-- El par de llaves (`.pem` / `.ppk`) asociado a la instancia
-- Acceso `sudo` en la instancia
+- Permisos sobre EC2 en la región (`us-east-1` por defecto). En AWS Academy
+  Learner Lab bastan los del rol `voclabs`.
+
+No hace falta JDK ni Maven en este equipo: el `.jar` lo compila GitHub Actions.
 
 ---
 
-## 3. Compilar el artefacto
-
-Desde la raíz del repositorio, en el equipo local:
+## 4. Aprovisionar la instancia (una sola vez)
 
 ```bash
-# Linux / macOS
-./mvnw clean package
-
-# Windows
-.\mvnw.cmd clean package
+./infra/aws/provision-ec2.sh
 ```
 
-Esto ejecuta las pruebas y genera:
+El script es idempotente: si el par de llaves, el security group o la
+instancia ya existen, los reutiliza. Al terminar imprime la IP pública y los
+valores que hay que cargar como secretos.
 
+Qué crea:
+
+| Recurso | Nombre | Detalle |
+|---|---|---|
+| Par de llaves | `ms-prestamos-key` | ed25519. La privada queda en `~/.ssh/ms-prestamos-key.pem`, **fuera del repo** (`*.pem` está en `.gitignore`) |
+| Security group | `ms-prestamos-sg` | Entrada TCP 22 (SSH para el pipeline) y TCP 9005 (API). **3306 no se abre** |
+| Instancia | `ms-prestamos` | `t3.micro`, AMI Ubuntu 24.04 más reciente de Canonical, disco gp3 de 12 GB |
+
+> **Por qué 22 y 9005 a `0.0.0.0/0`:** los runners de GitHub Actions no tienen
+> IP fija, y la API debe poder demostrarse desde cualquier red. En un entorno
+> real el puerto 22 se restringiría a una VPN o se reemplazaría por AWS SSM, y
+> la API iría detrás de un balanceador con TLS.
+
+### 4.1 Qué hace `user-data.sh` en el primer arranque
+
+1. Instala `openjdk-21-jre-headless` y `mysql-server`.
+2. Crea la base `prestamos` y el usuario `prestamos_app` con una **contraseña
+   aleatoria generada en la propia instancia** (`openssl rand`), con permisos
+   acotados a ese esquema. El servicio nunca se conecta como `root`.
+3. Escribe `/etc/ms-prestamos.env` (perfil `prod`, puerto, credenciales) con
+   permisos `600` y dueño `root`.
+4. Crea `/opt/ms-prestamos` y la unidad `ms-prestamos.service`, que ejecuta
+   siempre `/opt/ms-prestamos/ms-prestamos.jar` (nombre fijo, independiente de
+   la versión del `pom.xml`).
+5. Habilita el servicio pero **no lo arranca**: el `.jar` llega con el primer
+   despliegue.
+6. Da al usuario `ubuntu` permiso `sudo` sin contraseña **solo** para
+   `systemctl start|stop|restart|status ms-prestamos` y `journalctl -u
+   ms-prestamos`. Es lo mínimo que necesita el pipeline.
+
+Comprobar que terminó (tarda 2–4 minutos):
+
+```bash
+ssh -i ~/.ssh/ms-prestamos-key.pem ubuntu@<IP_PUBLICA> 'cat /var/log/ms-prestamos-provision.done'
 ```
-target/ms-prestamos-0.0.1-SNAPSHOT.jar
-```
-
-> Si las pruebas fallan, el `.jar` no se genera. Es intencional: un artefacto que
-> no pasa su propia suite no debería llegar nunca a un servidor.
-
-Para saltar las pruebas puntualmente (solo si ya se verificaron en el pipeline):
-`./mvnw clean package -DskipTests`.
 
 ---
 
-## 4. Preparar la instancia EC2
+## 5. Cargar los secretos en GitHub
 
-### 4.1 Conectarse
+El workflow de despliegue lee tres secretos del repositorio
+(*Settings → Secrets and variables → Actions*):
 
-```bash
-ssh -i ~/.ssh/mi-llave.pem ubuntu@<IP_PUBLICA>
-```
-
-| Dato | Valor |
+| Secreto | Valor |
 |---|---|
-| Host | IP pública de la instancia |
-| Puerto | 22 |
-| Usuario | `ubuntu` |
-| Llave | archivo `.pem` (o `.ppk` en PuTTY) |
+| `EC2_HOST` | IP pública (o DNS) de la instancia |
+| `EC2_USER` | `ubuntu` |
+| `EC2_SSH_KEY` | Contenido completo de `~/.ssh/ms-prestamos-key.pem` |
 
-### 4.2 Instalar el runtime de Java
-
-El `.jar` ya trae embebido Tomcat y todas las librerías, así que basta con el JRE
-(no el JDK completo):
+Con GitHub CLI:
 
 ```bash
-sudo apt update
-sudo apt install -y openjdk-21-jre-headless
-java -version    # debe mostrar 21.x
+gh secret set EC2_HOST --body "<IP_PUBLICA>"
+gh secret set EC2_USER --body "ubuntu"
+gh secret set EC2_SSH_KEY < ~/.ssh/ms-prestamos-key.pem
 ```
 
-### 4.3 Instalar y asegurar MySQL
-
-```bash
-sudo apt install -y mysql-server
-sudo systemctl enable --now mysql
-sudo mysql_secure_installation
-```
-
-### 4.4 Crear la base de datos y el usuario de aplicación
-
-Copiar `db/init-prestamos.sql` a la instancia y ejecutarlo. **Antes de ejecutarlo,
-reemplazar `CAMBIAR_ESTA_PASSWORD` por una contraseña real**:
-
-```bash
-# desde el equipo local
-scp -i ~/.ssh/mi-llave.pem db/init-prestamos.sql ubuntu@<IP_PUBLICA>:/home/ubuntu/
-
-# ya dentro de la instancia
-nano /home/ubuntu/init-prestamos.sql      # cambiar la contraseña
-sudo mysql < /home/ubuntu/init-prestamos.sql
-rm /home/ubuntu/init-prestamos.sql        # no dejar la contraseña en el disco
-```
-
-El script crea la base `prestamos` y el usuario `prestamos_app` con permisos
-acotados a esa única base. El microservicio **no se conecta como `root`**: si las
-credenciales de la aplicación se filtraran, el daño queda contenido a un solo
-esquema.
-
-Las tablas no se crean aquí — las genera Hibernate en el primer arranque, porque
-el perfil `prod` usa `ddl-auto: update`.
+> Si la instancia se detiene y vuelve a arrancar, la IP pública cambia:
+> hay que actualizar `EC2_HOST`.
 
 ---
 
-## 5. Publicar el artefacto
+## 6. Despliegue continuo
 
-### 5.1 Crear el directorio de despliegue
+Cada push a `main` (es decir, cada merge de un release o de un hotfix) ejecuta
+`CD - Despliegue en EC2`:
 
-```bash
-sudo mkdir -p /opt/ms-prestamos
-sudo chown ubuntu:ubuntu /opt/ms-prestamos
-```
+| Paso | Qué hace | Por qué |
+|---|---|---|
+| Compilar, probar y empaquetar | `./mvnw clean package` | El `.jar` que se despliega es el que acaba de pasar las pruebas; nunca se sube uno compilado a mano |
+| Preparar SSH | Escribe la llave desde el secreto y registra la huella del host | El runner es efímero: no tiene nada configurado |
+| Copiar el artefacto | `scp` a `/opt/ms-prestamos/ms-prestamos.jar.new` | Se copia con otro nombre para no pisar el `.jar` en uso a medias |
+| Activar y reiniciar | `mv` atómico + `systemctl restart` | Si el `scp` falla, el servicio sigue con la versión anterior |
+| Verificar healthcheck | `curl /actuator/health` hasta 120 s | El job falla si el servicio no llega a `UP`, y vuelca el `journalctl` para diagnosticar |
 
-### 5.2 Copiar el `.jar`
-
-Desde el equipo local:
-
-```bash
-scp -i ~/.ssh/mi-llave.pem \
-    target/ms-prestamos-0.0.1-SNAPSHOT.jar \
-    ubuntu@<IP_PUBLICA>:/opt/ms-prestamos/
-```
-
-Verificar en la instancia que el archivo llegó completo:
-
-```bash
-ls -lh /opt/ms-prestamos/
-```
+También se puede lanzar a mano desde la pestaña *Actions* (`workflow_dispatch`),
+por ejemplo tras reaprovisionar la instancia.
 
 ---
 
-## 6. Configurar las credenciales
-
-Las contraseñas **no viajan en el repositorio ni en el `.jar`**. Se declaran en un
-archivo de entorno que solo puede leer `root`, y `systemd` las inyecta al proceso:
+## 7. Verificar el despliegue
 
 ```bash
-sudo nano /etc/ms-prestamos.env
-```
-
-Contenido:
-
-```ini
-SPRING_PROFILES_ACTIVE=prod
-SERVER_PORT=9005
-DB_HOST=localhost
-DB_PORT=3306
-DB_NAME=prestamos
-DB_USER=prestamos_app
-DB_PASSWORD=la_password_definida_en_el_paso_4.4
-```
-
-Restringir los permisos del archivo:
-
-```bash
-sudo chmod 600 /etc/ms-prestamos.env
-sudo chown root:root /etc/ms-prestamos.env
-```
-
-> `chmod 600` es la parte que importa: sin ella, cualquier usuario de la instancia
-> podría leer la contraseña de la base de datos con un simple `cat`.
-
----
-
-## 7. Crear el servicio de systemd
-
-```bash
-sudo nano /etc/systemd/system/ms-prestamos.service
-```
-
-```ini
-[Unit]
-Description=Microservicio de prestamos de biblioteca (ms-prestamos)
-# Arrancar despues de la red y de MySQL: si la base no esta lista,
-# Hibernate falla al validar el esquema y el servicio muere al iniciar.
-After=network.target mysql.service
-Wants=mysql.service
-
-[Service]
-Type=simple
-User=ubuntu
-WorkingDirectory=/opt/ms-prestamos
-
-# Las credenciales entran por aqui, nunca en la linea de comandos:
-# un ExecStart con la password seria visible para todos en 'ps aux'.
-EnvironmentFile=/etc/ms-prestamos.env
-
-ExecStart=/usr/bin/java -jar /opt/ms-prestamos/ms-prestamos-0.0.1-SNAPSHOT.jar
-
-# 143 = SIGTERM. Spring Boot termina asi en un apagado limpio; sin esta linea
-# systemd lo reportaria como fallo cada vez que se detiene el servicio.
-SuccessExitStatus=143
-
-Restart=on-failure
-RestartSec=10
-
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-```
-
-> El valor de `ExecStart` debe coincidir **exactamente** con el nombre del archivo
-> que hay en `/opt/ms-prestamos` (verificar con `ls -la`). Un nombre incorrecto
-> produce el error *"Unable to access jarfile"*.
-
-### Habilitar e iniciar
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable ms-prestamos.service
-sudo systemctl start ms-prestamos.service
-sudo systemctl status ms-prestamos.service
-```
-
-El estado debe indicar `Active: active (running)`.
-
----
-
-## 8. Abrir el puerto en el Security Group
-
-En la consola de AWS → **EC2 → Instancias → Seguridad → Security Group → Editar
-reglas de entrada**, agregar:
-
-| Tipo | Protocolo | Puerto | Origen |
-|---|---|---|---|
-| TCP personalizado | TCP | `9005` | El rango de IP que deba consumir la API |
-
-> Evitar `0.0.0.0/0` salvo que la API deba ser realmente pública: el
-> microservicio no tiene autenticación, así que abrirlo a todo internet expone
-> los datos de préstamos y sus operaciones de escritura a cualquiera.
-
-MySQL (3306) **no debe abrirse**: el microservicio se conecta por `localhost`
-dentro de la misma instancia.
-
----
-
-## 9. Verificar el despliegue
-
-```bash
-# Dentro de la instancia
-curl http://localhost:9005/actuator/health
+curl http://<IP_PUBLICA>:9005/actuator/health
 # {"status":"UP","components":{"db":{"status":"UP",...}}}
 
-curl http://localhost:9005/api/v1/prestamos
+curl http://<IP_PUBLICA>:9005/api/v1/prestamos
 ```
-
-Desde fuera, en un navegador:
 
 | Recurso | URL |
 |---|---|
@@ -269,55 +167,77 @@ Desde fuera, en un navegador:
 | Swagger UI | `http://<IP_PUBLICA>:9005/swagger-ui.html` |
 | API | `http://<IP_PUBLICA>:9005/api/v1/prestamos` |
 
-`/actuator/health` devuelve además el estado del componente `db`, así que sirve
-para distinguir "la aplicación no arrancó" de "arrancó pero no alcanza MySQL".
+`/actuator/health` incluye el estado del componente `db`, así que distingue
+"la aplicación no arrancó" de "arrancó pero no alcanza MySQL".
 
 ---
 
-## 10. Operación
+## 8. Operación
 
 ```bash
-sudo journalctl -u ms-prestamos.service -f        # logs en tiempo real
+ssh -i ~/.ssh/ms-prestamos-key.pem ubuntu@<IP_PUBLICA>
+
+sudo journalctl -u ms-prestamos.service -f                  # logs en tiempo real
 sudo journalctl -u ms-prestamos.service -n 100 --no-pager   # últimas 100 líneas
-sudo systemctl restart ms-prestamos.service       # reiniciar
-sudo systemctl stop ms-prestamos.service          # detener
-sudo systemctl disable ms-prestamos.service       # quitar del arranque automático
+sudo systemctl restart ms-prestamos.service                 # reiniciar
+sudo systemctl stop ms-prestamos.service                    # detener
+sudo systemctl status ms-prestamos.service                  # estado
 ```
 
-### Desplegar una versión nueva
+Detener o arrancar la instancia desde el equipo local:
 
 ```bash
-sudo systemctl stop ms-prestamos.service
-# copiar el nuevo .jar por scp
-sudo systemctl start ms-prestamos.service
-sudo journalctl -u ms-prestamos.service -f
+aws ec2 stop-instances  --instance-ids <ID>
+aws ec2 start-instances --instance-ids <ID>
 ```
 
 ---
 
-## 11. Resolución de problemas
+## 9. Despliegue manual (plan B)
+
+Si GitHub Actions no está disponible, el mismo procedimiento se hace a mano
+desde un equipo con JDK 21:
+
+```bash
+./mvnw clean package
+scp -i ~/.ssh/ms-prestamos-key.pem target/ms-prestamos-0.0.1-SNAPSHOT.jar \
+    ubuntu@<IP_PUBLICA>:/opt/ms-prestamos/ms-prestamos.jar.new
+ssh -i ~/.ssh/ms-prestamos-key.pem ubuntu@<IP_PUBLICA> \
+    'cd /opt/ms-prestamos && mv -f ms-prestamos.jar.new ms-prestamos.jar && sudo systemctl restart ms-prestamos.service'
+```
+
+Para una instancia **no** aprovisionada con `user-data.sh` (por ejemplo, un
+servidor ya existente), replicar los pasos de la sección 4.1 a mano: instalar
+JRE y MySQL, ejecutar `db/init-prestamos.sql` reemplazando
+`CAMBIAR_ESTA_PASSWORD`, crear `/etc/ms-prestamos.env` con `chmod 600` y copiar
+la unidad `systemd` que aparece en `infra/aws/user-data.sh`.
+
+---
+
+## 10. Resolución de problemas
 
 | Síntoma | Causa habitual | Cómo verificarlo |
 |---|---|---|
-| `Unable to access jarfile` | El nombre del `.jar` en `ExecStart` no coincide con el real | `ls -la /opt/ms-prestamos/` |
+| El job falla en *Preparar acceso SSH* / *Copiar el artefacto* | `EC2_HOST` desactualizado (la IP cambió) o puerto 22 cerrado | `aws ec2 describe-instances --filters Name=tag:Name,Values=ms-prestamos` |
+| `Permission denied (publickey)` | `EC2_SSH_KEY` no corresponde al par de llaves de la instancia | `ssh -i ~/.ssh/ms-prestamos-key.pem ubuntu@<IP>` desde el equipo local |
+| El healthcheck nunca llega a `UP` | La instancia aún ejecuta `user-data.sh` o MySQL no arrancó | `cat /var/log/ms-prestamos-provision.done`; `systemctl status mysql` |
+| `Unable to access jarfile` | El `.jar` no se copió a `/opt/ms-prestamos/ms-prestamos.jar` | `ls -la /opt/ms-prestamos/` |
 | El servicio reinicia en bucle | Excepción al arrancar (BD, puerto ocupado, variable faltante) | `sudo journalctl -u ms-prestamos.service -n 100 --no-pager` |
-| `Access denied for user 'prestamos_app'` | `DB_PASSWORD` no coincide con la del paso 4.4 | `mysql -u prestamos_app -p prestamos` |
-| `Unknown database 'prestamos'` | No se ejecutó `init-prestamos.sql` | `sudo mysql -e "SHOW DATABASES;"` |
-| `Could not resolve placeholder 'DB_USER'` | `EnvironmentFile` mal referenciado o sin la variable | `sudo cat /etc/ms-prestamos.env` |
-| Responde en `localhost` pero no desde fuera | Puerto cerrado en el Security Group | Revisar reglas de entrada (paso 8) |
-| `Web server failed to start. Port 9005 was already in use` | Quedó un proceso Java anterior vivo | `sudo lsof -i :9005` |
+| `Access denied for user 'prestamos_app'` | `/etc/ms-prestamos.env` editado a mano con otra contraseña | `sudo cat /etc/ms-prestamos.env` y `mysql -u prestamos_app -p prestamos` |
+| Responde en `localhost` pero no desde fuera | Puerto 9005 cerrado en el security group | `aws ec2 describe-security-groups --group-names ms-prestamos-sg` |
+| `Port 9005 was already in use` | Quedó un proceso Java anterior vivo | `sudo lsof -i :9005` |
 
-Para ver el stacktrace completo sin el ruido de systemd, ejecutar el `.jar` a
+Para ver el stacktrace completo sin el ruido de `systemd`, ejecutar el `.jar` a
 mano cargando las variables de entorno:
 
 ```bash
-set -a && source /etc/ms-prestamos.env && set +a
-java -jar /opt/ms-prestamos/ms-prestamos-0.0.1-SNAPSHOT.jar
+set -a && sudo cat /etc/ms-prestamos.env > /tmp/env && source /tmp/env && set +a && rm /tmp/env
+java -jar /opt/ms-prestamos/ms-prestamos.jar
 ```
 
 ---
 
-## 12. Diferencias respecto al entorno local
+## 11. Diferencias respecto al entorno local
 
 | | Local (`dev`) | EC2 (`prod`) |
 |---|---|---|
@@ -327,4 +247,4 @@ java -jar /opt/ms-prestamos/ms-prestamos-0.0.1-SNAPSHOT.jar
 | Credenciales | No aplica | Variables de entorno en `/etc/ms-prestamos.env` |
 | Consola H2 | Habilitada | Deshabilitada |
 | Nivel de log | `DEBUG` | `INFO` |
-| Ejecución | `./mvnw spring-boot:run` | `systemd` |
+| Ejecución | `./mvnw spring-boot:run` | `systemd`, desplegado por GitHub Actions |
