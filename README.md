@@ -385,14 +385,16 @@ espacios, con un nombre que describa **qué** cambia (no quién ni cuándo).
 | Tipo | Uso | Ejemplos de este repositorio |
 |---|---|---|
 | `feature/` | Nueva funcionalidad o mejora | `feature/devolucion-prestamo`, `feature/prestamos-atrasados`, `feature/ci-pipeline` |
-| `hotfix/` | Corrección urgente sobre `main` | `hotfix/eliminar-prestamo-vigente` |
+| `hotfix/` | Corrección urgente sobre `main` (código o documentación publicada) | `hotfix/eliminar-prestamo-vigente`, `hotfix/ramas-visibles-en-remoto` |
 | `release/` | Preparación de una versión | `release/1.0.0` |
 | `docs/` | Cambios solo de documentación (opcional; también puede ir como `feature/`) | `docs/guia-repositorio` |
 
 Reglas:
 
 - Una rama, un propósito. Si una feature crece, se divide en dos ramas.
-- Se borra la rama remota al fusionar el PR (GitHub lo hace con *Delete branch*).
+- Al fusionar el PR la rama queda cerrada: no recibe más commits. En un proyecto en
+  producción se borra del remoto con *Delete branch*; **en esta entrega las ramas se
+  conservan publicadas** para que el docente pueda revisarlas con `git branch -r`.
 - Nunca se hace commit directo en `main` ni en `develop`.
 
 ### 11.2 Mensajes de commit
@@ -528,6 +530,8 @@ del workflow.
 | [#6](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/6) | `release/1.0.0` | release | `main` | Versión 1.0.0 → tag `v1.0.0` → despliegue automático en EC2 | ✅ |
 | [#7](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/7) | `hotfix/eliminar-prestamo-vigente` | hotfix | `main` | `DELETE` rechaza préstamos `VIGENTE` → tag `v1.0.1` → redespliegue | ✅ |
 | [#8](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/8) | `main` | sync | `develop` | Devuelve el hotfix a la rama de integración | ✅ |
+| [#9](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/9) | `hotfix/ramas-visibles-en-remoto` | hotfix (docs) | `main` | Aclara en la guía que las ramas de la simulación se conservan en el remoto → tag `v1.0.2` | ✅ |
+| [#10](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/10) | `main` | sync | `develop` | Devuelve el ajuste de documentación a `develop` | ✅ |
 
 ### Cómo se produjo el conflicto del PR #4 y cómo se resolvió
 
