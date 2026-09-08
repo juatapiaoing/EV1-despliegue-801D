@@ -103,6 +103,30 @@ public class PrestamoService {
         return prestamoMapper.toResponse(prestamoRepository.save(prestamo));
     }
 
+    /**
+     * Registra la devolucion de un ejemplar.
+     *
+     * Es la unica via para cerrar un prestamo: el PUT ignora estado y fecha de
+     * devolucion a proposito. Solo un prestamo VIGENTE puede devolverse; uno
+     * DEVUELTO o CANCELADO ya termino su ciclo y volver a cerrarlo seria un
+     * error del cliente, no una operacion idempotente.
+     */
+    @Transactional
+    public PrestamoResponse registrarDevolucion(Long id) {
+        Prestamo prestamo = obtenerPrestamo(id);
+
+        if (prestamo.getEstado() != EstadoPrestamo.VIGENTE) {
+            throw new BusinessRuleException(String.format(
+                    "El prestamo %d no esta vigente (estado actual: %s) y no admite devolucion",
+                    id, prestamo.getEstado()));
+        }
+
+        prestamo.setFechaDevolucion(LocalDate.now());
+        prestamo.setEstado(EstadoPrestamo.DEVUELTO);
+
+        return prestamoMapper.toResponse(prestamoRepository.save(prestamo));
+    }
+
     @Transactional
     public void deleteById(Long id) {
         prestamoRepository.delete(obtenerPrestamo(id));

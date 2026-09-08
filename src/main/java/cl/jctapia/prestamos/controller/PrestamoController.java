@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import cl.jctapia.prestamos.dto.PrestamoRequest;
 import cl.jctapia.prestamos.dto.PrestamoResponse;
+import cl.jctapia.prestamos.model.EstadoPrestamo;
 import cl.jctapia.prestamos.service.PrestamoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -65,6 +67,14 @@ public class PrestamoController {
 
         prestamo.add(linkTo(methodOn(PrestamoController.class).deleteById(id))
                 .withRel("delete").withTitle("DELETE - Eliminar prestamo"));
+
+        // El enlace de devolucion solo se ofrece cuando la operacion es posible:
+        // asi el cliente no necesita conocer la regla de negocio para saber si
+        // puede cerrar el prestamo.
+        if (prestamo.getEstado() == EstadoPrestamo.VIGENTE) {
+            prestamo.add(linkTo(methodOn(PrestamoController.class).registrarDevolucion(id))
+                    .withRel("devolucion").withTitle("PATCH - Registrar devolucion"));
+        }
 
         prestamo.add(linkTo(methodOn(PrestamoController.class).findByRutUsuario(prestamo.getRutUsuario()))
                 .withRel("historial-usuario").withTitle("GET - Historial del socio"));
@@ -180,6 +190,21 @@ public class PrestamoController {
                 content = @Content(schema = @Schema(implementation = PrestamoRequest.class)))
             @Valid @RequestBody PrestamoRequest request) {
         return ResponseEntity.ok(addLinks(prestamoService.update(id, request)));
+    }
+
+    @Operation(summary = "Registrar la devolucion de un prestamo",
+               description = "Marca el prestamo como DEVUELTO y fija la fecha de devolucion en el dia actual. Solo aplica a prestamos VIGENTE")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Devolucion registrada correctamente",
+            content = @Content(schema = @Schema(implementation = PrestamoResponse.class))),
+        @ApiResponse(responseCode = "404", description = "El prestamo no existe", content = @Content),
+        @ApiResponse(responseCode = "409", description = "El prestamo no esta vigente", content = @Content)
+    })
+    @PatchMapping("/{id}/devolucion")
+    public ResponseEntity<PrestamoResponse> registrarDevolucion(
+            @Parameter(description = "ID del prestamo a devolver", required = true, example = "2")
+            @PathVariable Long id) {
+        return ResponseEntity.ok(addLinks(prestamoService.registrarDevolucion(id)));
     }
 
     @Operation(summary = "Eliminar un prestamo",

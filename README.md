@@ -116,6 +116,7 @@ Base: `http://localhost:9005/api/v1/prestamos`
 | `GET` | `/atrasados` | Préstamos `VIGENTE` con fecha de vencimiento anterior a hoy, del más atrasado al más reciente | 200 |
 | `POST` | `/` | Registra un préstamo en estado `VIGENTE` | 201, 400, 409 |
 | `PUT` | `/{id}` | Actualiza los datos de un préstamo | 200, 400, 404, 409 |
+| `PATCH` | `/{id}/devolucion` | Registra la devolución: estado `DEVUELTO` y fecha de hoy. Solo para préstamos `VIGENTE` | 200, 404, 409 |
 | `DELETE` | `/{id}` | Elimina un préstamo | 204, 404 |
 
 Todas las respuestas de error comparten el mismo envelope `ApiError`

@@ -221,6 +221,44 @@ class PrestamoServiceTest {
         assertTrue(prestamoService.findAtrasados().isEmpty());
     }
 
+    // ─── registrarDevolucion ──────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("registrarDevolucion cierra un prestamo VIGENTE con la fecha de hoy")
+    void registrarDevolucion_marcaDevueltoYFechaActual_cuandoElPrestamoEstaVigente() {
+        when(prestamoRepository.findById(1L)).thenReturn(Optional.of(prestamo));
+        when(prestamoRepository.save(prestamo)).thenReturn(prestamo);
+        when(prestamoMapper.toResponse(prestamo)).thenReturn(new PrestamoResponse());
+
+        prestamoService.registrarDevolucion(1L);
+
+        ArgumentCaptor<Prestamo> capturado = ArgumentCaptor.forClass(Prestamo.class);
+        verify(prestamoRepository).save(capturado.capture());
+        assertEquals(EstadoPrestamo.DEVUELTO, capturado.getValue().getEstado());
+        assertEquals(LocalDate.now(), capturado.getValue().getFechaDevolucion());
+    }
+
+    @Test
+    @DisplayName("registrarDevolucion rechaza un prestamo que ya fue devuelto")
+    void registrarDevolucion_lanzaBusinessRuleException_cuandoElPrestamoNoEstaVigente() {
+        prestamo.setEstado(EstadoPrestamo.DEVUELTO);
+        when(prestamoRepository.findById(1L)).thenReturn(Optional.of(prestamo));
+
+        BusinessRuleException ex = assertThrows(BusinessRuleException.class,
+                () -> prestamoService.registrarDevolucion(1L));
+
+        assertTrue(ex.getMessage().contains("DEVUELTO"));
+        verify(prestamoRepository, never()).save(any(Prestamo.class));
+    }
+
+    @Test
+    @DisplayName("registrarDevolucion lanza 404 cuando el prestamo no existe")
+    void registrarDevolucion_lanzaEntityNotFoundException_cuandoElPrestamoNoExiste() {
+        when(prestamoRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(EntityNotFoundException.class, () -> prestamoService.registrarDevolucion(99L));
+    }
+
     // ─── delete ───────────────────────────────────────────────────────────────
 
     @Test
