@@ -535,8 +535,18 @@ del workflow.
 | [#8](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/8) | `main` | sync | `develop` | Devuelve el hotfix a la rama de integración | ✅ |
 | [#9](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/9) | `hotfix/ramas-visibles-en-remoto` | hotfix (docs) | `main` | Aclara en la guía que las ramas de la simulación se conservan en el remoto → tag `v1.0.2` | ✅ |
 | [#10](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/10) | `main` | sync | `develop` | Devuelve el ajuste de documentación a `develop` | ✅ |
-| [#11](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/11) | `hotfix/readme-autor-unico` | hotfix (docs) | `main` | El encargo se hizo de forma individual: se quita al segundo integrante y se agrega la reflexión personal → tag `v1.0.3` | ✅ |
-| [#12](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/12) | `main` | sync | `develop` | Devuelve el ajuste a `develop` | ✅ |
+| [#11](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/11) | `develop` | sync | `main` | PR abierto desde la web de GitHub; sin cambios de contenido porque `develop` ya estaba al día con `main` | ✅ |
+| [#12](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/12) | `hotfix/readme-autor-unico` | hotfix (docs) | `main` | El encargo se hizo de forma individual: se quita al segundo integrante y se agrega la reflexión personal | ✅ |
+| [#13](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/13) | `main` | sync | `develop` | Cerrado sin fusionar: lo reemplazó #15 | — |
+| [#14](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/14) | `hotfix/trazabilidad-pr` | hotfix (docs) | `main` | Corrige la numeración de los PR en esta tabla → tag `v1.0.3` | ✅ |
+| [#15](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/15) | `main` | sync | `develop` | Devuelve los dos ajustes de documentación a `develop` | ✅ |
+
+> Nota sobre #11 y #12: el PR #11 se abrió desde la web mientras un script de la
+> CLI fusionaba el hotfix asumiendo que le tocaría ese número. El resultado es que
+> los merge commits de #11 y #12 en `main` quedaron con el asunto intercambiado.
+> `main` está protegida contra force-push, así que no se reescribe la historia: se
+> deja constancia aquí. Lección: tomar el número del PR de la respuesta de
+> `gh pr create`, nunca darlo por supuesto.
 
 ### Cómo se produjo el conflicto del PR #4 y cómo se resolvió
 
