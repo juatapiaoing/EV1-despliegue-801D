@@ -1,0 +1,31 @@
+# ── Compilacion Maven ────────────────────────────────────────────
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# ── IDE ──────────────────────────────────────────────────────────
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+.classpath
+.project
+.settings/
+bin/
+
+# ── Sistema operativo ────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Logs y temporales ────────────────────────────────────────────
+*.log
+logs/
+*.bak
+
+# ── Secretos: nunca deben viajar al repositorio ─────────────────
+.env
+*.pem
+*.ppk
+application-local.yml
