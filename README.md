@@ -77,6 +77,7 @@ EV1-despliegue-801D/
 │   └── init-prestamos.sql         Creación de BD y usuario de aplicación en MySQL (instalación manual)
 ├── docs/
 │   ├── despliegue-aws.md          Guía de despliegue en EC2 (aprovisionamiento, CD, operación)
+│   ├── evidencias/                Salidas reales del despliegue en EC2 y runs de CD
 │   └── enunciado/                 Material de la evaluación
 ├── infra/aws/
 │   ├── provision-ec2.sh           Aprovisiona llaves, security group e instancia con la AWS CLI
@@ -275,6 +276,16 @@ git push main ──► GitHub Actions ──► mvnw package ──► scp .jar
 El procedimiento completo (aprovisionamiento, secretos, operación, plan B manual
 y resolución de problemas) está en [docs/despliegue-aws.md](docs/despliegue-aws.md).
 
+Las **evidencias del despliegue real** (salida del aprovisionamiento, runs de CD,
+healthcheck, `/actuator/info` y la verificación del hotfix contra la API
+desplegada) están en [docs/evidencias/despliegue-ec2.md](docs/evidencias/despliegue-ec2.md).
+
+> La instancia corre en **AWS Academy Learner Lab**, que la detiene al cerrar la
+> sesión del laboratorio y le asigna otra IP al arrancarla. Última IP conocida:
+> `18.234.175.172` (puerto 9005). Para una revisión en vivo, seguir los pasos de
+> la sección 5 de las evidencias; si la instancia no responde en un push a
+> `main`, el workflow de CD omite el despliegue con un aviso en vez de fallar.
+
 ---
 
 ## 10. Estrategia de ramificación
@@ -338,36 +349,36 @@ gitGraph
    commit id: "feat: CRUD prestamos"
    branch develop
    checkout develop
-   branch feature/ci-pipeline
+   branch "feature/ci-pipeline"
    commit id: "ci: workflow"
    checkout develop
-   merge feature/ci-pipeline id: "PR #1"
-   branch feature/despliegue-ec2
+   merge "feature/ci-pipeline" id: "PR #1"
+   branch "feature/despliegue-ec2"
    commit id: "feat(infra): CD EC2"
    checkout develop
-   merge feature/despliegue-ec2 id: "PR #2"
-   branch feature/devolucion-prestamo
+   merge "feature/despliegue-ec2" id: "PR #2"
+   branch "feature/devolucion-prestamo"
    commit id: "feat: devolucion"
    checkout develop
-   branch feature/prestamos-atrasados
+   branch "feature/prestamos-atrasados"
    commit id: "feat: atrasados"
    checkout develop
-   merge feature/devolucion-prestamo id: "PR #3"
-   checkout feature/prestamos-atrasados
+   merge "feature/devolucion-prestamo" id: "PR #3"
+   checkout "feature/prestamos-atrasados"
    merge develop id: "resuelve conflicto"
    checkout develop
-   merge feature/prestamos-atrasados id: "PR #4"
-   branch release/1.0.0
+   merge "feature/prestamos-atrasados" id: "PR #4"
+   branch "release/1.0.0"
    commit id: "chore(release): 1.0.0"
    checkout main
-   merge release/1.0.0 id: "PR release" tag: "v1.0.0"
+   merge "release/1.0.0" id: "PR release" tag: "v1.0.0"
    checkout develop
    merge main id: "sync release"
    checkout main
-   branch hotfix/eliminar-prestamo-vigente
+   branch "hotfix/eliminar-prestamo-vigente"
    commit id: "fix: no borrar VIGENTE"
    checkout main
-   merge hotfix/eliminar-prestamo-vigente id: "PR hotfix" tag: "v1.0.1"
+   merge "hotfix/eliminar-prestamo-vigente" id: "PR hotfix" tag: "v1.0.1"
    checkout develop
    merge main id: "sync hotfix"
 ```
@@ -540,6 +551,8 @@ del workflow.
 | [#13](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/13) | `main` | sync | `develop` | Cerrado sin fusionar: lo reemplazó #15 | — |
 | [#14](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/14) | `hotfix/trazabilidad-pr` | hotfix (docs) | `main` | Corrige la numeración de los PR en esta tabla → tag `v1.0.3` | ✅ |
 | [#15](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/15) | `main` | sync | `develop` | Devuelve los dos ajustes de documentación a `develop` | ✅ |
+| [#16](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/16) | `hotfix/entrega-final` | hotfix | `main` | Evidencias del despliegue, CD que omite el despliegue si la instancia está detenida, ajustes finales del README → tag `v1.0.4` | ✅ |
+| [#17](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/17) | `main` | sync | `develop` | Devuelve el cierre de la entrega a `develop` | ✅ |
 
 > Nota sobre #11 y #12: el PR #11 se abrió desde la web mientras un script de la
 > CLI fusionaba el hotfix asumiendo que le tocaría ese número. El resultado es que
@@ -606,7 +619,7 @@ pasos en una máquina virtual efímera. En este proyecto cumple dos roles:
 | `workflow_dispatch` | cualquiera | Ejecución manual desde la pestaña *Actions* |
 
 Pasos: checkout → JDK 21 Temurin con caché de Maven → `./mvnw -B clean verify`
-(compila, corre las 14 pruebas con H2 y empaqueta) → publica el `.jar` y los
+(compila, corre las 15 pruebas con H2 y empaqueta) → publica el `.jar` y los
 reportes de Surefire como artefactos del run. Dura menos de un minuto.
 
 ### 13.3 Workflow de CD (`.github/workflows/cd-deploy.yml`)
@@ -616,7 +629,9 @@ reportes de Surefire como artefactos del run. Dura menos de un minuto.
 | `push` | `main` | Desplegar cada release y cada hotfix |
 | `workflow_dispatch` | `main` | Redesplegar a mano (por ejemplo, tras reaprovisionar la instancia) |
 
-Pasos: compilar y probar de nuevo → preparar la llave SSH desde el secreto
+Pasos: comprobar que la instancia responde en el puerto 22 (si no, el despliegue
+se omite con un aviso y el run queda en verde) → compilar y probar de nuevo →
+preparar la llave SSH desde el secreto
 `EC2_SSH_KEY` → `scp` del `.jar` a `/opt/ms-prestamos/ms-prestamos.jar.new` →
 `mv` atómico y `systemctl restart` → esperar hasta 120 s a que
 `/actuator/health` responda `UP`. Si el healthcheck falla, el job termina en
