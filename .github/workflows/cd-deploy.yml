@@ -31,8 +31,30 @@ env:
   APP_PORT: 9005
 
 jobs:
+  # La instancia vive en AWS Academy Learner Lab, que la detiene al cerrar la
+  # sesion. Si no responde, se omite el despliegue con un aviso en lugar de
+  # dejar main en rojo; se relanza a mano (workflow_dispatch) al reactivarla.
+  verificar:
+    name: Comprobar que la instancia responde
+    runs-on: ubuntu-latest
+    outputs:
+      online: ${{ steps.ping.outputs.online }}
+    steps:
+      - name: Probar el puerto SSH de la instancia
+        id: ping
+        run: |
+          if timeout 10 bash -c 'cat < /dev/null > /dev/tcp/${{ secrets.EC2_HOST }}/22' 2>/dev/null; then
+            echo "online=true" >> "$GITHUB_OUTPUT"
+            echo "Instancia accesible: se continua con el despliegue."
+          else
+            echo "online=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Despliegue omitido::La instancia EC2 no responde en el puerto 22 (laboratorio detenido o IP cambiada). Actualizar EC2_HOST y relanzar con workflow_dispatch."
+          fi
+
   deploy:
     name: Empaquetar y desplegar
+    needs: verificar
+    if: needs.verificar.outputs.online == 'true'
     runs-on: ubuntu-latest
 
     steps:
