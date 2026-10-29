@@ -44,12 +44,33 @@ jobs:
       - name: Compilar, probar y empaquetar
         run: ./mvnw -B clean verify
 
+      # Se ejecuta aunque falle el umbral: el reporte de JaCoCo se genera antes
+      # de la verificacion, asi el resumen muestra cuanto falto.
+      - name: Resumir la cobertura en el run
+        if: always()
+        run: |
+          csv=target/site/jacoco/jacoco.csv
+          [ -f "$csv" ] || exit 0
+          awk -F, 'NR>1 { lm+=$8; lc+=$9; bm+=$6; bc+=$7 } END {
+            printf "### Cobertura de pruebas (JaCoCo)\n\n| Metrica | Cobertura |\n|---|---|\n"
+            printf "| Lineas | %.1f %% (%d de %d) |\n", 100*lc/(lm+lc), lc, lm+lc
+            printf "| Ramas | %.1f %% (%d de %d) |\n", (bm+bc > 0 ? 100*bc/(bm+bc) : 100), bc, bm+bc
+          }' "$csv" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Publicar reportes de pruebas
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: reportes-surefire
           path: target/surefire-reports/
+          retention-days: 7
+
+      - name: Publicar reporte de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-cobertura
+          path: target/site/jacoco/
           retention-days: 7
 
       - name: Publicar artefacto .jar
