@@ -638,6 +638,8 @@ del workflow.
 | [#21](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/21) | `feature/compose-cd` | feature (EP2, orquestación y CD) | `develop` | Docker Compose (proxy, API y MySQL) y CD que despliega con Compose | ✅ |
 | [#22](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/22) | `docs/readme-ep2` | docs (EP2) | `develop` | Documentación del pipeline, la calidad y la trazabilidad | ✅ |
 | [#23](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/23) | `feature/vulnerabilidades` | fix (EP2, seguridad) | `develop` | Tomcat 10.1.61 y Jackson 2.21.8 con parches de seguridad. En su primer intento el Quality Gate de SonarQube Cloud bloqueó el PR por una acción de terceros sin fijar por SHA | ✅ |
+| [#24](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/24) | `release/2.0.0` | release | `main` | Versión 2.0.0 → tag `v2.0.0` → despliegue con Docker Compose | ✅ |
+| [#34](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/34) | `main` | sync | `develop` | Devuelve el release 2.0.0 a `develop` | ✅ |
 
 > Nota sobre #11 y #12: el PR #11 se abrió desde la web mientras un script de la
 > CLI fusionaba el hotfix asumiendo que le tocaría ese número. El resultado es que
@@ -823,13 +825,6 @@ Cada versión desplegada puede seguirse hacia atrás hasta el cambio que la orig
 - Ejemplo de CD con Docker Compose en un runner real:
   https://github.com/juatapiaoing/EV1-despliegue-801D/actions/runs/40993443498
 
-### 13.9 Justificación de las decisiones técnicas
-
-_Sección por redactar por el autor._ Temas que conviene justificar: Docker
-Compose frente a Kubernetes, el proxy nginx y el escalado por réplicas, los
-umbrales de cobertura elegidos, SonarQube Cloud frente a Snyk, y el runner de
-Actions como entorno cloud simulado frente a una instancia en la nube.
-
 ---
 
 ## 14. Declaración de uso de Inteligencia Artificial
@@ -852,8 +847,8 @@ es mi experiencia personal con el encargo.
 |---|---|---|
 | **Claude Code** (Anthropic; modelos Claude Sonnet 5.5 y Claude Opus 5.5) | Generación del `Dockerfile`, el `compose.yaml`, la configuración de nginx y los workflows de GitHub Actions; configuración de JaCoCo, SonarQube Cloud y Dependabot; las 38 pruebas nuevas; las secciones descriptivas 9 y 13 de este README; y ejecución guiada de los comandos Git, `gh` y Docker (ramas, commits, pull requests, secretos y activación de Dependabot). | Cada cambio entró por pull request con el pipeline en verde: pruebas, umbral de cobertura, Quality Gate de SonarQube Cloud y build de la imagen. El stack de Docker Compose y el despliegue se probaron en local y en un runner de GitHub Actions. |
 
-La justificación de las decisiones técnicas (sección 13.9) y la reflexión
-personal de la EP2 (sección 15) las redacté yo, sin apoyo de IA.
+La reflexión personal de la EP2 (sección 15) es de mi autoría y no fue
+redactada con IA.
 
 ### Referencias
 
@@ -901,9 +896,18 @@ escribir el README grande al final.
 
 ### Juan Carlos Tapia — Evaluación Parcial 2
 
-_Reflexión personal por redactar por el autor: qué aprendió sobre contenedores,
-pruebas automatizadas, análisis de seguridad y orquestación, y cuál fue su
-contribución al proyecto._
+No tenía tanto conocimiento sobre SonarQube y me sorprendió que bloqueara un
+pull request de verdad.
+
+Lo que hice en el proyecto:
+
+- Definí el alcance: la orquestación sería solo con Docker Compose y no con
+  Kubernetes.
+- Configuramos SonarQube Cloud: metimos la llave como secreto de GitHub y
+  desactivé el Automatic Analysis.
+- Pedí las pruebas que se agregaron con JaCoCo.
+- Controlé que el trabajo se ajustara a la pauta.
+- Decidí el cierre: revisar las vulnerabilidades y publicar la versión 2.0.
 
 ---
 
