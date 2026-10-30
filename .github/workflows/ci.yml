@@ -3,13 +3,23 @@
 # ============================================================
 # Se ejecuta en:
 #   - cada push a develop        -> valida la rama de integracion
+#   - cada push a main           -> deja analizada la version publicada
 #   - cada pull request a main    -> bloquea releases/hotfixes rotos
 #   - cada pull request a develop -> valida las features antes del merge
 #
 # Dos jobs encadenados:
-#   build   compila, corre las pruebas y empaqueta el .jar.
+#   build   compila, corre las pruebas con el umbral de cobertura de JaCoCo,
+#           empaqueta el .jar y lo analiza en SonarQube Cloud.
 #   imagen  construye la imagen Docker y comprueba que el contenedor arranca;
 #           solo corre si build termino en verde.
+#
+# Bloqueos de calidad y seguridad (cualquiera de ellos deja el run en rojo y,
+# por los rulesets de la rama, impide fusionar el pull request):
+#   - cobertura de pruebas por debajo del umbral (JaCoCo)
+#   - Quality Gate de SonarQube Cloud en rojo
+#
+# Las dependencias vulnerables las vigila Dependabot (ver dependabot.yml).
+#
 # Las pruebas usan H2 en memoria (perfil dev), por lo que el runner
 # no necesita base de datos ni ningun servicio externo.
 # ============================================================
@@ -17,7 +27,7 @@ name: CI - Build y pruebas
 
 on:
   push:
-    branches: [develop]
+    branches: [develop, main]
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
@@ -30,6 +40,10 @@ jobs:
     steps:
       - name: Obtener el codigo
         uses: actions/checkout@v4
+        with:
+          # SonarQube necesita el historial completo para saber que lineas son
+          # nuevas en cada cambio.
+          fetch-depth: 0
 
       - name: Configurar JDK 21 (Temurin)
         uses: actions/setup-java@v4
@@ -56,6 +70,18 @@ jobs:
             printf "| Lineas | %.1f %% (%d de %d) |\n", 100*lc/(lm+lc), lc, lm+lc
             printf "| Ramas | %.1f %% (%d de %d) |\n", (bm+bc > 0 ? 100*bc/(bm+bc) : 100), bc, bm+bc
           }' "$csv" >> "$GITHUB_STEP_SUMMARY"
+
+      # SonarQube Cloud (plan gratuito) analiza la rama principal y los pull
+      # requests; las demas ramas se validan solo con las pruebas. El scanner
+      # espera el veredicto del Quality Gate: si es rojo, este paso falla.
+      - name: Analisis de calidad y seguridad (SonarQube Cloud)
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: >
+          ./mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+          -Dsonar.qualitygate.wait=true
+          -Dsonar.qualitygate.timeout=300
 
       - name: Publicar reportes de pruebas
         if: always()

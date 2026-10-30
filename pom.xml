@@ -41,6 +41,17 @@
         <jacoco-maven-plugin.version>0.8.13</jacoco-maven-plugin.version>
 
         <!--
+            SonarQube Cloud: identifican el proyecto (no son secretos; el token
+            viaja aparte en el secreto SONAR_TOKEN de GitHub). La cobertura la
+            toma del xml que genera JaCoCo.
+        -->
+        <sonar.organization>juatapiaoing</sonar.organization>
+        <sonar.projectKey>juatapiaoing_EV1-despliegue-801D</sonar.projectKey>
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <sonar.coverage.jacoco.xmlReportPaths>${project.build.directory}/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+        <sonar.coverage.exclusions>**/MsPrestamosApplication.java</sonar.coverage.exclusions>
+
+        <!--
             Politica de calidad del proyecto: umbrales minimos de cobertura de
             las pruebas. Si el build baja de estos valores, "mvn verify" falla y
             el pipeline bloquea el merge. Subirlos es libre; bajarlos exige
@@ -130,6 +141,20 @@
     </dependencies>
 
     <build>
+        <!--
+            La version del scanner de SonarQube Cloud vive aqui (y no en el
+            workflow) para que Dependabot la mantenga actualizada.
+        -->
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.sonarsource.scanner.maven</groupId>
+                    <artifactId>sonar-maven-plugin</artifactId>
+                    <version>5.8.0.7211</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+
         <plugins>
 
             <!-- Empaqueta el .jar ejecutable que se copia a la instancia EC2 -->
