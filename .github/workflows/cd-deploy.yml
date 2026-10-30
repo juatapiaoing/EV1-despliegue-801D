@@ -34,7 +34,7 @@ jobs:
 
     steps:
       - name: Obtener el codigo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # La version sale del pom.xml y el commit del evento: asi la imagen queda
       # identificada sin pasos manuales.
