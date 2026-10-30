@@ -1,20 +1,24 @@
 # ============================================================
 # CI - Integracion continua de ms-prestamos
 # ============================================================
-# Se ejecuta en:
-#   - cada push a develop        -> valida la rama de integracion
-#   - cada pull request a main    -> bloquea releases/hotfixes rotos
-#   - cada pull request a develop -> valida las features antes del merge
+# Se ejecuta en push a develop y main, y en cada pull request a develop o main.
 #
-# Un solo job: compilar, correr las pruebas y empaquetar el .jar.
-# Las pruebas usan H2 en memoria (perfil dev), por lo que el runner
-# no necesita base de datos ni ningun servicio externo.
+#   build   compila, corre las pruebas (con el umbral de cobertura de JaCoCo),
+#           empaqueta el .jar y lo analiza en SonarQube Cloud.
+#   imagen  construye la imagen Docker; solo corre si build termino en verde.
+#
+# Dos bloqueos: cobertura bajo el umbral (JaCoCo) y Quality Gate en rojo
+# (SonarQube Cloud). Cualquiera deja el run en rojo y, por los rulesets de la
+# rama, impide fusionar el pull request.
+#
+# Las pruebas usan H2 en memoria (perfil dev): el runner no necesita base de
+# datos ni ningun servicio externo.
 # ============================================================
 name: CI - Build y pruebas
 
 on:
   push:
-    branches: [develop]
+    branches: [develop, main]
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
@@ -27,6 +31,10 @@ jobs:
     steps:
       - name: Obtener el codigo
         uses: actions/checkout@v4
+        with:
+          # SonarQube necesita el historial completo para saber que lineas son
+          # nuevas en cada cambio.
+          fetch-depth: 0
 
       - name: Configurar JDK 21 (Temurin)
         uses: actions/setup-java@v4
@@ -41,6 +49,17 @@ jobs:
       - name: Compilar, probar y empaquetar
         run: ./mvnw -B clean verify
 
+      # El plan gratuito de SonarQube Cloud analiza la rama principal y los pull
+      # requests. El scanner espera el veredicto del Quality Gate: si es rojo,
+      # este paso falla.
+      - name: Analisis de calidad y seguridad (SonarQube Cloud)
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: >
+          ./mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:5.8.0.7211:sonar
+          -Dsonar.qualitygate.wait=true
+
       - name: Publicar reportes de pruebas
         if: always()
         uses: actions/upload-artifact@v4
@@ -49,9 +68,29 @@ jobs:
           path: target/surefire-reports/
           retention-days: 7
 
+      - name: Publicar reporte de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-cobertura
+          path: target/site/jacoco/
+          retention-days: 7
+
       - name: Publicar artefacto .jar
         uses: actions/upload-artifact@v4
         with:
           name: ms-prestamos-jar
           path: target/ms-prestamos-*.jar
           retention-days: 7
+
+  imagen:
+    name: Construir imagen Docker
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Obtener el codigo
+        uses: actions/checkout@v4
+
+      - name: Construir la imagen
+        run: docker build -t ms-prestamos:ci .

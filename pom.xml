@@ -22,7 +22,7 @@
     <!-- Coordenadas GAV del microservicio -->
     <groupId>cl.jctapia</groupId>
     <artifactId>ms-prestamos</artifactId>
-    <version>1.0.4</version>
+    <version>2.0.0</version>
     <packaging>jar</packaging>
 
     <name>ms-prestamos</name>
@@ -38,6 +38,35 @@
         <springdoc-openapi.version>2.8.17</springdoc-openapi.version>
         <mysql-connector-j.version>8.4.0</mysql-connector-j.version>
         <h2.version>2.3.232</h2.version>
+        <jacoco-maven-plugin.version>0.8.13</jacoco-maven-plugin.version>
+
+        <!--
+            Versiones con parches de seguridad para dependencias que llegan a
+            traves de Spring Boot 3.5.15, cuyo BOM todavia trae versiones con
+            CVE publicados. Se pueden quitar cuando el BOM las alcance.
+        -->
+        <tomcat.version>10.1.61</tomcat.version>
+        <jackson-bom.version>2.21.8</jackson-bom.version>
+
+        <!--
+            SonarQube Cloud: identifican el proyecto (no son secretos; el token
+            viaja aparte en el secreto SONAR_TOKEN de GitHub). La cobertura la
+            toma del xml que genera JaCoCo.
+        -->
+        <sonar.organization>juatapiaoing</sonar.organization>
+        <sonar.projectKey>juatapiaoing_EV1-despliegue-801D</sonar.projectKey>
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <sonar.coverage.jacoco.xmlReportPaths>${project.build.directory}/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+        <sonar.coverage.exclusions>**/MsPrestamosApplication.java</sonar.coverage.exclusions>
+
+        <!--
+            Politica de calidad del proyecto: umbrales minimos de cobertura de
+            las pruebas. Si el build baja de estos valores, "mvn verify" falla y
+            el pipeline bloquea el merge. Subirlos es libre; bajarlos exige
+            justificarlo en el pull request.
+        -->
+        <jacoco.minimum.line>0.90</jacoco.minimum.line>
+        <jacoco.minimum.branch>0.80</jacoco.minimum.branch>
     </properties>
 
     <dependencies>
@@ -165,6 +194,71 @@
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
+            </plugin>
+
+            <!--
+                JaCoCo mide que lineas y ramas del codigo recorren las pruebas.
+                  - prepare-agent: instrumenta la JVM de Surefire.
+                  - report:        genera target/site/jacoco (html y xml). El xml
+                                   es el que consume SonarQube Cloud.
+                  - check:         aplica los umbrales de cobertura (ver
+                                   propiedades jacoco.minimum.*) y rompe el build
+                                   si no se cumplen.
+                Quedan fuera el metodo main y el mapper que MapStruct genera: no
+                tienen logica propia que probar. El codigo que Lombok genera se
+                ignora solo, gracias a lombok.config.
+            -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco-maven-plugin.version}</version>
+                <configuration>
+                    <excludes>
+                        <exclude>cl/jctapia/prestamos/MsPrestamosApplication.class</exclude>
+                        <exclude>cl/jctapia/prestamos/mapper/*Impl.class</exclude>
+                    </excludes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>check</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>${jacoco.minimum.line}</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>${jacoco.minimum.branch}</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
         </plugins>

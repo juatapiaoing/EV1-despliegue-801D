@@ -1,0 +1,31 @@
+# Lo que no debe entrar al contexto de build: acelera el build, evita que una
+# capa arrastre secretos y mantiene la imagen reproducible.
+
+# Compilacion local (la imagen compila por su cuenta)
+target/
+
+# Control de versiones y automatizacion
+.git
+.gitignore
+.gitattributes
+.github/
+
+# IDE
+.idea/
+.vscode/
+.classpath
+.project
+.settings/
+*.iml
+
+# Documentacion e infraestructura que no se ejecuta dentro del contenedor
+docs/
+infra/
+db/
+*.md
+
+# Secretos
+.env
+*.pem
+*.ppk
+application-local.yml
