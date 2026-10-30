@@ -1,115 +1,103 @@
 # ============================================================
-# CD - Despliegue continuo de ms-prestamos en AWS EC2
+# CD - Despliegue continuo de ms-prestamos con Docker Compose
 # ============================================================
-# Se ejecuta en cada push a main (es decir, al cerrar un release o
-# un hotfix). Vuelve a compilar y probar el codigo, copia el .jar a la
-# instancia por SSH, reinicia el servicio systemd y comprueba el
-# healthcheck de Actuator desde fuera de la instancia.
+# Se ejecuta en cada push a main (es decir, al cerrar un release o un hotfix)
+# y a mano desde la pestana Actions.
 #
-# Secretos del repositorio que necesita (Settings > Secrets > Actions):
-#   EC2_HOST      IP publica o DNS de la instancia
-#   EC2_USER      usuario SSH (ubuntu)
-#   EC2_SSH_KEY   llave privada del par de llaves de la instancia
+# El "entorno cloud simulado" es el propio runner de GitHub Actions: levanta
+# el stack de compose.yaml (proxy + API + MySQL) tal como correria en un
+# servidor, comprueba que funciona de punta a punta y deja registrado en el
+# resumen del run que version y que commit quedaron desplegados.
 #
-# La instancia se aprovisiona con infra/aws/provision-ec2.sh, que deja
-# instalado el JRE, MySQL y la unidad systemd (ver docs/despliegue-aws.md).
+# Trazabilidad: el commit de main -> la version del pom.xml -> la imagen
+# ms-prestamos:<commit> (con version y commit grabados como etiquetas) -> el
+# despliegue registrado en Settings > Environments > produccion.
 # ============================================================
-name: CD - Despliegue en EC2
+name: CD - Despliegue con Docker Compose
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-# Nunca dos despliegues a la vez sobre la misma instancia.
+# Nunca dos despliegues a la vez.
 concurrency:
-  group: despliegue-ec2
+  group: despliegue
   cancel-in-progress: false
 
-env:
-  APP_DIR: /opt/ms-prestamos
-  APP_PORT: 9005
-
 jobs:
-  # La instancia vive en AWS Academy Learner Lab, que la detiene al cerrar la
-  # sesion. Si no responde, se omite el despliegue con un aviso en lugar de
-  # dejar main en rojo; se relanza a mano (workflow_dispatch) al reactivarla.
-  verificar:
-    name: Comprobar que la instancia responde
-    runs-on: ubuntu-latest
-    outputs:
-      online: ${{ steps.ping.outputs.online }}
-    steps:
-      - name: Probar el puerto SSH de la instancia
-        id: ping
-        run: |
-          if timeout 10 bash -c 'cat < /dev/null > /dev/tcp/${{ secrets.EC2_HOST }}/22' 2>/dev/null; then
-            echo "online=true" >> "$GITHUB_OUTPUT"
-            echo "Instancia accesible: se continua con el despliegue."
-          else
-            echo "online=false" >> "$GITHUB_OUTPUT"
-            echo "::warning title=Despliegue omitido::La instancia EC2 no responde en el puerto 22 (laboratorio detenido o IP cambiada). Actualizar EC2_HOST y relanzar con workflow_dispatch."
-          fi
-
   deploy:
-    name: Empaquetar y desplegar
-    needs: verificar
-    if: needs.verificar.outputs.online == 'true'
+    name: Desplegar en el entorno simulado
     runs-on: ubuntu-latest
+    # Deja el despliegue registrado en la pestana Deployments del repositorio.
+    environment: produccion
 
     steps:
       - name: Obtener el codigo
         uses: actions/checkout@v4
 
-      - name: Configurar JDK 21 (Temurin)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: maven
-
-      - name: Compilar, probar y empaquetar
+      # La version sale del pom.xml y el commit del evento: asi la imagen queda
+      # identificada sin pasos manuales.
+      - name: Calcular version y commit
         run: |
-          chmod +x mvnw
-          ./mvnw -B clean package
-          cp target/ms-prestamos-*.jar ms-prestamos.jar
-          ls -lh ms-prestamos.jar
+          version=$(awk '/<artifactId>ms-prestamos<\/artifactId>/{getline; print}' pom.xml | sed -E 's/.*<version>(.*)<\/version>.*/\1/')
+          {
+            echo "VERSION=${version}"
+            echo "GIT_SHA=${GITHUB_SHA}"
+            echo "IMAGE_TAG=${GITHUB_SHA::7}"
+          } >> "$GITHUB_ENV"
 
-      - name: Preparar acceso SSH a la instancia
+      # Las credenciales se generan en cada despliegue: no viajan por el
+      # repositorio ni por los secretos.
+      - name: Generar las credenciales del despliegue
         run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2.pem
-          chmod 600 ~/.ssh/ec2.pem
-          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          {
+            echo "DB_PASSWORD=$(openssl rand -hex 16)"
+            echo "MYSQL_ROOT_PASSWORD=$(openssl rand -hex 16)"
+          } > .env
 
-      - name: Copiar el artefacto a la instancia
-        run: |
-          scp -i ~/.ssh/ec2.pem ms-prestamos.jar \
-              "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${APP_DIR}/ms-prestamos.jar.new"
+      - name: Desplegar con Docker Compose
+        run: docker compose up -d --build
 
-      - name: Activar la nueva version y reiniciar el servicio
+      - name: Verificar el despliegue
         run: |
-          ssh -i ~/.ssh/ec2.pem "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" bash -s <<'REMOTE'
-            set -e
-            cd /opt/ms-prestamos
-            # Reemplazo atomico: si algo falla a mitad, el jar anterior sigue intacto.
-            mv -f ms-prestamos.jar.new ms-prestamos.jar
-            sudo systemctl restart ms-prestamos.service
-            sleep 5
-            sudo systemctl is-active ms-prestamos.service
-          REMOTE
-
-      - name: Verificar healthcheck
-        run: |
+          docker compose ps
           for i in $(seq 1 24); do
-            if curl -fsS "http://${{ secrets.EC2_HOST }}:${APP_PORT}/actuator/health" | grep -q '"status":"UP"'; then
-              echo "Servicio UP en http://${{ secrets.EC2_HOST }}:${APP_PORT}"
-              exit 0
+            if curl -fsS http://localhost:9005/actuator/health | grep '"status":"UP"' >/dev/null; then
+              echo "Servicio UP"
+              break
             fi
+            [ "$i" -eq 24 ] && { echo "El servicio no respondio UP en 120 s"; exit 1; }
             echo "Esperando al servicio... ($i/24)"
             sleep 5
           done
-          echo "El servicio no respondio UP en 120 s"
-          ssh -i ~/.ssh/ec2.pem "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
-              'sudo journalctl -u ms-prestamos.service -n 60 --no-pager'
-          exit 1
+
+          # Prueba de humo de punta a punta: proxy -> API -> MySQL.
+          inicio=$(date +%F); fin=$(date -d '+14 days' +%F)
+          curl -fsS -X POST http://localhost:9005/api/v1/prestamos \
+            -H 'Content-Type: application/json' \
+            -d "{\"codigoLibro\":\"CD-0001\",\"rutUsuario\":\"18345678-9\",\"fechaPrestamo\":\"${inicio}\",\"fechaVencimiento\":\"${fin}\"}"
+          echo
+          curl -fsS http://localhost:9005/api/v1/prestamos/usuario/18345678-9 | grep 'CD-0001' >/dev/null
+          echo "Prestamo registrado y leido desde MySQL"
+
+      - name: Registrar la trazabilidad en el resumen del run
+        run: |
+          {
+            echo "### Despliegue"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Version | \`${VERSION}\` |"
+            echo "| Commit | \`${GIT_SHA}\` |"
+            echo "| Imagen | \`ms-prestamos:${IMAGE_TAG}\` |"
+            echo "| Version informada por la API | \`$(curl -fsS http://localhost:9005/actuator/info | grep -o '"version":"[^"]*"')\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Mostrar los logs si algo fallo
+        if: failure()
+        run: docker compose logs --tail 80
+
+      - name: Retirar el entorno
+        if: always()
+        run: docker compose down -v
