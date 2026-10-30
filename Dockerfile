@@ -12,7 +12,7 @@
 # ============================================================
 
 # ── Etapa 1: build ───────────────────────────────────────────
-FROM eclipse-temurin:21-jdk-alpine AS build
+FROM eclipse-temurin:24-jdk-alpine AS build
 WORKDIR /build
 
 # Primero solo lo que define las dependencias: mientras el pom.xml no cambie,
@@ -25,7 +25,7 @@ COPY src src
 RUN ./mvnw -B -q package -DskipTests
 
 # ── Etapa 2: runtime ─────────────────────────────────────────
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:24-jre-alpine
 
 # Version y commit quedan grabados en la imagen: permiten rastrear un
 # contenedor en ejecucion hasta el codigo que lo genero.
