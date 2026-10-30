@@ -1,0 +1,25 @@
+# Dependabot: revisa cada semana las dependencias y abre un pull request por
+# cada actualizacion. Los PR apuntan a develop para respetar GitFlow.
+#   maven           librerias del pom.xml
+#   docker          imagenes base del Dockerfile
+#   github-actions  acciones de los workflows
+version: 2
+
+updates:
+  - package-ecosystem: maven
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly

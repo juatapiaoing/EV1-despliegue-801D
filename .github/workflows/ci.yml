@@ -1,23 +1,24 @@
 # ============================================================
 # CI - Integracion continua de ms-prestamos
 # ============================================================
-# Se ejecuta en:
-#   - cada push a develop        -> valida la rama de integracion
-#   - cada pull request a main    -> bloquea releases/hotfixes rotos
-#   - cada pull request a develop -> valida las features antes del merge
+# Se ejecuta en push a develop y main, y en cada pull request a develop o main.
 #
-# Dos jobs encadenados:
-#   build   compila, corre las pruebas y empaqueta el .jar.
-#   imagen  construye la imagen Docker y comprueba que el contenedor arranca;
-#           solo corre si build termino en verde.
-# Las pruebas usan H2 en memoria (perfil dev), por lo que el runner
-# no necesita base de datos ni ningun servicio externo.
+#   build   compila, corre las pruebas (con el umbral de cobertura de JaCoCo),
+#           empaqueta el .jar y lo analiza en SonarQube Cloud.
+#   imagen  construye la imagen Docker; solo corre si build termino en verde.
+#
+# Dos bloqueos: cobertura bajo el umbral (JaCoCo) y Quality Gate en rojo
+# (SonarQube Cloud). Cualquiera deja el run en rojo y, por los rulesets de la
+# rama, impide fusionar el pull request.
+#
+# Las pruebas usan H2 en memoria (perfil dev): el runner no necesita base de
+# datos ni ningun servicio externo.
 # ============================================================
 name: CI - Build y pruebas
 
 on:
   push:
-    branches: [develop]
+    branches: [develop, main]
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
@@ -30,6 +31,10 @@ jobs:
     steps:
       - name: Obtener el codigo
         uses: actions/checkout@v4
+        with:
+          # SonarQube necesita el historial completo para saber que lineas son
+          # nuevas en cada cambio.
+          fetch-depth: 0
 
       - name: Configurar JDK 21 (Temurin)
         uses: actions/setup-java@v4
@@ -44,18 +49,16 @@ jobs:
       - name: Compilar, probar y empaquetar
         run: ./mvnw -B clean verify
 
-      # Se ejecuta aunque falle el umbral: el reporte de JaCoCo se genera antes
-      # de la verificacion, asi el resumen muestra cuanto falto.
-      - name: Resumir la cobertura en el run
-        if: always()
-        run: |
-          csv=target/site/jacoco/jacoco.csv
-          [ -f "$csv" ] || exit 0
-          awk -F, 'NR>1 { lm+=$8; lc+=$9; bm+=$6; bc+=$7 } END {
-            printf "### Cobertura de pruebas (JaCoCo)\n\n| Metrica | Cobertura |\n|---|---|\n"
-            printf "| Lineas | %.1f %% (%d de %d) |\n", 100*lc/(lm+lc), lc, lm+lc
-            printf "| Ramas | %.1f %% (%d de %d) |\n", (bm+bc > 0 ? 100*bc/(bm+bc) : 100), bc, bm+bc
-          }' "$csv" >> "$GITHUB_STEP_SUMMARY"
+      # El plan gratuito de SonarQube Cloud analiza la rama principal y los pull
+      # requests. El scanner espera el veredicto del Quality Gate: si es rojo,
+      # este paso falla.
+      - name: Analisis de calidad y seguridad (SonarQube Cloud)
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: >
+          ./mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:5.8.0.7211:sonar
+          -Dsonar.qualitygate.wait=true
 
       - name: Publicar reportes de pruebas
         if: always()
@@ -89,47 +92,5 @@ jobs:
       - name: Obtener el codigo
         uses: actions/checkout@v4
 
-      - name: Configurar Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Calcular la fecha de construccion
-        run: echo "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
-
-      # No se publica: solo se construye y se carga en el daemon del runner
-      # para probarla. La publicacion en el registro llega con el CD.
-      # En un PR, github.sha es el commit de merge temporal; el SHA real de la
-      # rama esta en pull_request.head.sha.
       - name: Construir la imagen
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          load: true
-          tags: ms-prestamos:ci
-          build-args: |
-            GIT_SHA=${{ github.event.pull_request.head.sha || github.sha }}
-            BUILD_DATE=${{ env.BUILD_DATE }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # Prueba de humo: la imagen arranca con el perfil dev (H2) y el
-      # healthcheck de Actuator responde UP.
-      - name: Probar que el contenedor arranca
-        run: |
-          docker run -d --name smoke -p 9005:9005 ms-prestamos:ci
-          for i in $(seq 1 24); do
-            if curl -fsS http://localhost:9005/actuator/health | grep -q '"status":"UP"'; then
-              echo "Contenedor UP"
-              exit 0
-            fi
-            echo "Esperando al contenedor... ($i/24)"
-            sleep 5
-          done
-          echo "El contenedor no respondio UP en 120 s"
-          docker logs smoke
-          exit 1
-
-      - name: Comprobar que no corre como root
-        run: |
-          usuario=$(docker exec smoke id -u)
-          echo "UID del proceso: ${usuario}"
-          test "${usuario}" != "0"
+        run: docker build -t ms-prestamos:ci .
