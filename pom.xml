@@ -41,6 +41,14 @@
         <jacoco-maven-plugin.version>0.8.13</jacoco-maven-plugin.version>
 
         <!--
+            Versiones con parches de seguridad para dependencias que llegan a
+            traves de Spring Boot 3.5.15, cuyo BOM todavia trae versiones con
+            CVE publicados. Se pueden quitar cuando el BOM las alcance.
+        -->
+        <tomcat.version>10.1.61</tomcat.version>
+        <jackson-bom.version>2.21.8</jackson-bom.version>
+
+        <!--
             SonarQube Cloud: identifican el proyecto (no son secretos; el token
             viaja aparte en el secreto SONAR_TOKEN de GitHub). La cobertura la
             toma del xml que genera JaCoCo.
