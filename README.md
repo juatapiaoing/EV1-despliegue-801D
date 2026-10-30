@@ -636,6 +636,8 @@ del workflow.
 | [#19](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/19) | `feature/calidad-pruebas` | feature (EP2, pruebas) | `develop` | JaCoCo con umbral de cobertura y 38 pruebas nuevas (controlador, repositorio, mapper e integración) | ✅ |
 | [#20](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/20) | `feature/seguridad` | feature (EP2, seguridad) | `develop` | SonarQube Cloud con Quality Gate bloqueante, Dependabot y simplificación del Dockerfile y del CI | ✅ |
 | [#21](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/21) | `feature/compose-cd` | feature (EP2, orquestación y CD) | `develop` | Docker Compose (proxy, API y MySQL) y CD que despliega con Compose | ✅ |
+| [#22](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/22) | `docs/readme-ep2` | docs (EP2) | `develop` | Documentación del pipeline, la calidad y la trazabilidad | ✅ |
+| [#23](https://github.com/juatapiaoing/EV1-despliegue-801D/pull/23) | `feature/vulnerabilidades` | fix (EP2, seguridad) | `develop` | Tomcat 10.1.61 y Jackson 2.21.8 con parches de seguridad. En su primer intento el Quality Gate de SonarQube Cloud bloqueó el PR por una acción de terceros sin fijar por SHA | ✅ |
 
 > Nota sobre #11 y #12: el PR #11 se abrió desde la web mientras un script de la
 > CLI fusionaba el hotfix asumiendo que le tocaría ese número. El resultado es que
@@ -832,7 +834,9 @@ Actions como entorno cloud simulado frente a una instancia en la nube.
 
 ## 14. Declaración de uso de Inteligencia Artificial
 
-Conforme a las indicaciones del encargo, declaro el uso de IA en este trabajo:
+Conforme a las indicaciones del encargo, declaro el uso de IA en este trabajo.
+
+### Evaluación Parcial 1
 
 | Herramienta | Para qué se usó | Qué revisé y validé yo |
 |---|---|---|
@@ -841,6 +845,19 @@ Conforme a las indicaciones del encargo, declaro el uso de IA en este trabajo:
 La comparación de modelos de ramificación y la justificación de la elección
 (sección 10) las revisé y las asumo como propias. La reflexión de la sección 15
 es mi experiencia personal con el encargo.
+
+### Evaluación Parcial 2
+
+| Herramienta | Para qué se usó | Cómo se validó |
+|---|---|---|
+| **Claude Code** (Anthropic; modelos Claude Sonnet 5.5 y Claude Opus 5.5) | Generación del `Dockerfile`, el `compose.yaml`, la configuración de nginx y los workflows de GitHub Actions; configuración de JaCoCo, SonarQube Cloud y Dependabot; las 38 pruebas nuevas; las secciones descriptivas 9 y 13 de este README; y ejecución guiada de los comandos Git, `gh` y Docker (ramas, commits, pull requests, secretos y activación de Dependabot). | Cada cambio entró por pull request con el pipeline en verde: pruebas, umbral de cobertura, Quality Gate de SonarQube Cloud y build de la imagen. El stack de Docker Compose y el despliegue se probaron en local y en un runner de GitHub Actions. |
+
+La justificación de las decisiones técnicas (sección 13.9) y la reflexión
+personal de la EP2 (sección 15) las redacté yo, sin apoyo de IA.
+
+### Referencias
+
+Anthropic. (2026). *Claude Code* (Claude Sonnet 5.5 y Claude Opus 5.5) [Modelo Grande de Lenguaje]. https://claude.com/claude-code
 
 Referencia institucional: https://bibliotecas.duoc.cl/ia
 
