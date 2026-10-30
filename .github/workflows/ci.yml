@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Obtener el codigo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # SonarQube necesita el historial completo para saber que lineas son
           # nuevas en cada cambio.
@@ -90,7 +90,7 @@ jobs:
 
     steps:
       - name: Obtener el codigo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Construir la imagen
         run: docker build -t ms-prestamos:ci .
