@@ -141,20 +141,6 @@
     </dependencies>
 
     <build>
-        <!--
-            La version del scanner de SonarQube Cloud vive aqui (y no en el
-            workflow) para que Dependabot la mantenga actualizada.
-        -->
-        <pluginManagement>
-            <plugins>
-                <plugin>
-                    <groupId>org.sonarsource.scanner.maven</groupId>
-                    <artifactId>sonar-maven-plugin</artifactId>
-                    <version>5.8.0.7211</version>
-                </plugin>
-            </plugins>
-        </pluginManagement>
-
         <plugins>
 
             <!-- Empaqueta el .jar ejecutable que se copia a la instancia EC2 -->

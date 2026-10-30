@@ -1,18 +1,8 @@
-# ============================================================
-# Dependabot - Escaneo y actualizacion automatica de dependencias
-# ============================================================
-# Cada semana revisa tres ecosistemas y abre un pull request por cada
-# actualizacion disponible. Los PR apuntan a develop (no a main) para
-# respetar GitFlow: pasan por el mismo CI que cualquier feature y solo
-# llegan a produccion dentro de un release.
-#
-#   maven           librerias del pom.xml y plugins de Maven
+# Dependabot: revisa cada semana las dependencias y abre un pull request por
+# cada actualizacion. Los PR apuntan a develop para respetar GitFlow.
+#   maven           librerias del pom.xml
 #   docker          imagenes base del Dockerfile
-#   github-actions  acciones usadas por los workflows
-#
-# Las alertas de vulnerabilidades y las actualizaciones de seguridad (que
-# no esperan al lunes) se activan aparte, en Settings > Code security.
-# ============================================================
+#   github-actions  acciones de los workflows
 version: 2
 
 updates:
@@ -21,36 +11,15 @@ updates:
     target-branch: develop
     schedule:
       interval: weekly
-      day: monday
-      time: "06:00"
-      timezone: America/Santiago
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: "chore(deps)"
-    groups:
-      # Las actualizaciones menores y de parche se agrupan en un solo PR para
-      # no inundar el repositorio; las mayores llegan siempre por separado.
-      minor-y-parches:
-        update-types: [minor, patch]
 
   - package-ecosystem: docker
     directory: /
     target-branch: develop
     schedule:
       interval: weekly
-      day: monday
-      time: "06:00"
-      timezone: America/Santiago
-    commit-message:
-      prefix: "chore(docker)"
 
   - package-ecosystem: github-actions
     directory: /
     target-branch: develop
     schedule:
       interval: weekly
-      day: monday
-      time: "06:00"
-      timezone: America/Santiago
-    commit-message:
-      prefix: "ci(deps)"
